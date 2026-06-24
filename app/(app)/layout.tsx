@@ -1,0 +1,135 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { LayoutDashboard, FolderGit2, ChevronRight } from 'lucide-react'
+import { Sidebar } from '@/components/patterns/Sidebar'
+import { Modal, Button, Dropdown } from '@/components/ui'
+import { useToast } from '@/components/ui/ToastContext'
+
+const navItems = [
+  { label: 'Dashboard', value: 'dashboard', icon: LayoutDashboard },
+  { label: 'Repositories', value: 'repositories', icon: FolderGit2 },
+]
+
+const pageTitles: Record<string, string> = {
+  dashboard: 'Dashboard',
+  repositories: 'Repositories',
+  settings: 'Settings',
+  members: 'Members',
+  pricing: 'Pricing',
+}
+
+const subjectOptions = [
+  { label: 'Bug', value: 'Bug' },
+  { label: 'Feature', value: 'Feature' },
+  { label: 'Sales', value: 'Sales' },
+  { label: 'Other', value: 'Other' },
+]
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const { toast } = useToast()
+
+  const [contactOpen, setContactOpen] = useState(false)
+  const [contactSubject, setContactSubject] = useState('Bug')
+  const [contactMessage, setContactMessage] = useState('')
+
+  const handleCloseContact = () => {
+    setContactOpen(false)
+    setContactSubject('Bug')
+    setContactMessage('')
+  }
+
+  const handleSendContact = () => {
+    if (!contactMessage.trim()) return
+    handleCloseContact()
+    toast('Message sent. We\'ll get back to you soon.')
+  }
+
+  useEffect(() => {
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = ''
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  const segments = pathname.split('/').filter(Boolean)
+  const activeValue = segments[0] || ''
+  const title = pageTitles[activeValue] || ''
+  const isSubpage = activeValue === 'repositories' && segments.length > 1
+
+  return (
+    <div className="flex h-screen w-screen bg-[var(--color-bg-page)] overflow-hidden">
+      <div className="flex-shrink-0 overflow-hidden">
+        <Sidebar
+          items={navItems}
+          activeValue={activeValue}
+          onNavigate={(v) => router.push(`/${v}`)}
+          brand="trustabl"
+          username="project-zane2127967"
+          email="Project"
+          onLogout={() => router.push('/')}
+          onAccount={() => router.push('/settings')}
+          onInvite={() => router.push('/members')}
+          onViewPlans={() => router.push('/pricing')}
+          onContactUs={() => setContactOpen(true)}
+        />
+      </div>
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="flex-shrink-0 h-[52px] flex items-center justify-between border-b border-[var(--color-border-muted)] px-6" style={{ zIndex: 'var(--z-overlay)' }}>
+          {isSubpage ? (
+            <div className="flex items-center gap-1.5 text-sm">
+              <button onClick={() => router.push('/repositories')} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] font-medium transition-colors">Repositories</button>
+              <ChevronRight size={14} className="text-[var(--color-text-tertiary)]" />
+              <span className="font-medium text-[var(--color-text-primary)]">{decodeURIComponent(segments[1])}</span>
+            </div>
+          ) : (
+            <h1 className="text-sm font-medium text-[var(--color-text-primary)]">{title}</h1>
+          )}
+        </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {children}
+        </div>
+      </div>
+
+      <Modal
+        open={contactOpen}
+        onClose={handleCloseContact}
+        title="Contact Us"
+        footer={
+          <>
+            <Button variant="ghost" onClick={handleCloseContact}>Cancel</Button>
+            <Button disabled={!contactMessage.trim()} onClick={handleSendContact}>Send message</Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            We'd love to hear from you. Fill out the form below and we'll get back to you as soon as possible.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-[var(--color-text-primary)]">Subject</label>
+            <Dropdown
+              options={subjectOptions}
+              value={contactSubject}
+              onChange={(v) => setContactSubject(v as string)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-[var(--color-text-primary)]">Message</label>
+            <textarea
+              value={contactMessage}
+              onChange={(e) => setContactMessage(e.target.value)}
+              placeholder="Describe your issue or question..."
+              rows={4}
+              className="w-full rounded-[var(--radius-sharp)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none transition-[border-color] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-border-focus)] resize-none"
+            />
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
