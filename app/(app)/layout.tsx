@@ -1,19 +1,20 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { LayoutDashboard, FolderGit2, ChevronRight } from 'lucide-react'
+import { Gauge, FolderGit2, ChevronRight, RotateCcw } from 'lucide-react'
 import { Sidebar } from '@/components/patterns/Sidebar'
 import { Modal, Button, Dropdown } from '@/components/ui'
 import { useToast } from '@/components/ui/ToastContext'
 
 const navItems = [
-  { label: 'Dashboard', value: 'dashboard', icon: LayoutDashboard },
+  { label: 'Dashboard', value: 'dashboard', icon: Gauge },
   { label: 'Repositories', value: 'repositories', icon: FolderGit2 },
 ]
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
   repositories: 'Repositories',
+  autofix: 'Repositories',
   settings: 'Settings',
   members: 'Members',
   pricing: 'Pricing',
@@ -59,7 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const segments = pathname.split('/').filter(Boolean)
   const activeValue = segments[0] || ''
   const title = pageTitles[activeValue] || ''
-  const isSubpage = activeValue === 'repositories' && segments.length > 1
+  const isSubpage = (activeValue === 'repositories' || activeValue === 'autofix') && segments.length > 1
 
   return (
     <div className="flex h-screen w-screen bg-[var(--color-bg-page)] overflow-hidden">
@@ -82,13 +83,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex-shrink-0 h-[52px] flex items-center justify-between border-b border-[var(--color-border-muted)] px-6" style={{ zIndex: 'var(--z-overlay)' }}>
           {isSubpage ? (
             <div className="flex items-center gap-1.5 text-sm">
-              <button onClick={() => router.push('/repositories')} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] font-medium transition-colors">Repositories</button>
+              <button onClick={() => router.push(`/${activeValue}`)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] font-medium transition-colors">{pageTitles[activeValue] || activeValue}</button>
               <ChevronRight size={14} className="text-[var(--color-text-tertiary)]" />
               <span className="font-medium text-[var(--color-text-primary)]">{decodeURIComponent(segments[1])}</span>
             </div>
           ) : (
             <h1 className="text-sm font-medium text-[var(--color-text-primary)]">{title}</h1>
           )}
+          <button onClick={() => window.location.href = '/dashboard'} className="flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+            <RotateCcw size={14} />
+            Reset
+          </button>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
           {children}

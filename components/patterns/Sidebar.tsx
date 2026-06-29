@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { ChevronsUpDown, PanelLeft, UserCircle, UserPlus, ArrowLeftRight, LogOut, Mail, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
+import { ChevronsUpDown, PanelLeft, Settings, UserPlus, ArrowLeftRight, LogOut, Mail, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
 import { NavItem, Divider } from '@/components/ui'
 
 function SidebarTooltip({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
@@ -248,7 +248,7 @@ export function Sidebar({
             onClick={() => { onAccount?.(); setMenuOpen(false) }}
             className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
           >
-            <UserCircle size={16} />
+            <Settings size={16} />
             Settings
           </button>
           <button

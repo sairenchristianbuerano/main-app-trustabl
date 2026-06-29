@@ -1,7 +1,7 @@
 'use client'
-import { useState } from 'react'
-import { Copy, Download } from 'lucide-react'
-import { Button, InputField, Divider, Badge, Avatar, Tabs, Table } from '@/components/ui'
+import { useState, useEffect } from 'react'
+import { Copy, Download, Key, Trash2 } from 'lucide-react'
+import { Button, InputField, Divider, Badge, Avatar, Tabs, Table, Dropdown } from '@/components/ui'
 import { FormLayout, FormSection } from '@/components/patterns/FormLayout'
 import { useToast } from '@/components/ui/ToastContext'
 
@@ -9,6 +9,13 @@ const settingsTabs = [
   { label: 'Account', value: 'account' },
   { label: 'Billing', value: 'billing' },
   { label: 'Project', value: 'project' },
+  { label: 'LLM', value: 'llm' },
+]
+
+const llmProviders = [
+  { label: 'Anthropic (Claude)', value: 'anthropic' },
+  { label: 'OpenAI', value: 'openai' },
+  { label: 'Google (Gemini)', value: 'google' },
 ]
 
 const invoices = [
@@ -25,6 +32,34 @@ export default function SettingsPage() {
   const [projectName, setProjectName] = useState('project-zane2127967')
   const [originalProjectName] = useState('project-zane2127967')
   const projectId = 'proj_zane2127967'
+
+  const [llmProvider, setLlmProvider] = useState('')
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmSaved, setLlmSaved] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('llm_config')
+    if (saved) {
+      const config = JSON.parse(saved)
+      setLlmProvider(config.provider || '')
+      setLlmApiKey(config.api_key || '')
+      setLlmSaved(true)
+    }
+  }, [])
+
+  const handleSaveLLM = () => {
+    localStorage.setItem('llm_config', JSON.stringify({ provider: llmProvider, api_key: llmApiKey }))
+    setLlmSaved(true)
+    toast('LLM configuration saved')
+  }
+
+  const handleRemoveLLM = () => {
+    localStorage.removeItem('llm_config')
+    setLlmProvider('')
+    setLlmApiKey('')
+    setLlmSaved(false)
+    toast('LLM configuration removed')
+  }
 
   const handleCopyProjectId = () => {
     navigator.clipboard.writeText(projectId)
@@ -169,6 +204,62 @@ export default function SettingsPage() {
                 </div>
                 <Button variant="secondary" size="sm" icon={Download}>Export</Button>
               </div>
+            </FormLayout>
+          </>
+        )}
+
+        {tab === 'llm' && (
+          <>
+            <FormLayout
+              title="LLM Provider"
+              onSubmit={(e) => { e.preventDefault(); handleSaveLLM() }}
+              footer={
+                llmSaved ? (
+                  <>
+                    <Button variant="danger" size="sm" type="button" icon={Trash2} onClick={handleRemoveLLM}>Remove key</Button>
+                    <Button type="submit" disabled={!llmProvider || !llmApiKey}>Update</Button>
+                  </>
+                ) : (
+                  <Button type="submit" disabled={!llmProvider || !llmApiKey} icon={Key}>Save API key</Button>
+                )
+              }
+            >
+              <div className="flex flex-col gap-1.5">
+                <p className="text-sm text-[var(--color-text-primary)]">
+                  Enrichment uses an LLM to generate detailed explanations and code fixes for static analysis findings. Bring your own API key — your key, your usage, your cost.
+                </p>
+              </div>
+              <Divider />
+              <FormSection title="Configuration">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-[var(--color-text-primary)]">Provider</label>
+                  <Dropdown
+                    options={llmProviders}
+                    value={llmProvider}
+                    onChange={(v) => setLlmProvider(v as string)}
+                    placeholder="Select provider"
+                  />
+                </div>
+                <InputField
+                  label="API Key"
+                  type="password"
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
+                  placeholder={llmProvider === 'anthropic' ? 'sk-ant-...' : llmProvider === 'openai' ? 'sk-...' : 'Enter API key'}
+                  hint="Your key is stored locally and never sent to our servers"
+                />
+              </FormSection>
+              {llmSaved && (
+                <>
+                  <Divider />
+                  <div className="flex items-center gap-2">
+                    <Badge variant="success" size="sm">Connected</Badge>
+                    <span className="text-xs text-[var(--color-text-tertiary)]">
+                      {llmProviders.find(p => p.value === llmProvider)?.label ?? llmProvider} configured
+                    </span>
+                  </div>
+                </>
+              )}
             </FormLayout>
           </>
         )}

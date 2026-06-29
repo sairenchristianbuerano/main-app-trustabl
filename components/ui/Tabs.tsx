@@ -63,7 +63,7 @@ export function Tabs({ tabs, value, onChange, variant = 'underline' }: TabsProps
             disabled={tab.disabled}
             onClick={() => onChange(tab.value)}
             className={[
-              'flex items-center gap-1.5 h-10 px-3.5 text-sm font-medium -mb-px',
+              'flex items-center gap-1.5 h-[52px] px-3.5 text-sm font-medium -mb-px',
               'border-b-2 transition-[color,border-color] duration-150',
               'disabled:opacity-40 disabled:cursor-not-allowed',
               isActive

@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, ChevronUp, Check, X } from 'lucide-react'
 
-interface Option { label: string; value: string }
+interface Option { label: string; value: string; group?: string }
 
 interface DropdownProps {
   options: Option[]
@@ -12,16 +12,21 @@ interface DropdownProps {
   placeholder?: string
   label?: string
   disabled?: boolean
+  triggerLabel?: string
+  triggerIcon?: React.ReactNode
+  hideChevron?: boolean
+  align?: 'left' | 'right'
 }
 
 export function Dropdown({
   options, value, onChange, type = 'single',
   placeholder = 'Select...', label, disabled,
+  triggerLabel, triggerIcon, hideChevron, align = 'left',
 }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, flipUp: false })
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -34,7 +39,14 @@ export function Dropdown({
   useEffect(() => {
     if (open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
-      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      const spaceBelow = window.innerHeight - rect.bottom
+      const flipUp = spaceBelow < 200
+      setPos({
+        top: flipUp ? rect.top - 4 : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        flipUp,
+      })
     }
   }, [open])
 
@@ -77,7 +89,10 @@ export function Dropdown({
               : 'border-[var(--color-border-muted)]',
           ].join(' ')}
         >
-          {type === 'multi' && (selected as string[]).length > 0 ? (
+          {triggerIcon && <span className="flex-shrink-0">{triggerIcon}</span>}
+          {triggerLabel ? (
+            <span className="flex-1 text-left truncate text-[var(--color-text-primary)]">{triggerLabel}</span>
+          ) : type === 'multi' && (selected as string[]).length > 0 ? (
             <div className="flex flex-wrap gap-1 flex-1 min-w-0">
               {(selectedLabels as Option[]).map(o => (
                 <span key={o.value} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--color-bg-raised)] border border-[var(--color-border-focus)] text-xs text-[var(--color-text-primary)]">
@@ -91,34 +106,37 @@ export function Dropdown({
               {Array.isArray(selectedLabels) || !selectedLabels ? placeholder : (selectedLabels as Option).label}
             </span>
           )}
-          {open ? <ChevronUp size={16} className="text-[var(--color-text-tertiary)] flex-shrink-0" /> : <ChevronDown size={16} className="text-[var(--color-text-tertiary)] flex-shrink-0" />}
+          {!hideChevron && (open ? <ChevronUp size={16} className="text-[var(--color-text-tertiary)] flex-shrink-0" /> : <ChevronDown size={16} className="text-[var(--color-text-tertiary)] flex-shrink-0" />)}
         </button>
 
         {open && (
           <ul
             role="listbox"
-            className="fixed rounded-[var(--radius-base)] border border-[var(--color-border-muted)] bg-[var(--color-bg-overlay)] shadow-[var(--shadow-float)] overflow-y-auto max-h-[300px] animate-[fadeScale_150ms_ease-out]"
-            style={{ zIndex: 'var(--z-dropdown)', top: pos.top, left: pos.left, width: pos.width, transformOrigin: 'top' }}
+            className="fixed rounded-[var(--radius-base)] border border-[var(--color-border-muted)] bg-[var(--color-bg-overlay)] shadow-[var(--shadow-float)] overflow-y-auto max-h-[320px] animate-[fadeScale_150ms_ease-out] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={{ zIndex: 'var(--z-dropdown)', ...(pos.flipUp ? { bottom: window.innerHeight - pos.top } : { top: pos.top }), ...(align === 'right' ? { right: window.innerWidth - pos.left - pos.width } : { left: pos.left }), minWidth: pos.width, transformOrigin: pos.flipUp ? (align === 'right' ? 'bottom right' : 'bottom') : (align === 'right' ? 'top right' : 'top') }}
           >
-            {options.map(option => {
+            {options.map((option, i) => {
               const isSelected = type === 'multi'
                 ? (selected as string[]).includes(option.value)
                 : selected === option.value
+              const showGroup = option.group && (i === 0 || options[i - 1].group !== option.group)
               return (
-                <li
-                  key={option.value}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => handleSelect(option.value)}
-                  className="flex items-center justify-between px-3 py-3 text-sm text-[var(--color-text-primary)] cursor-pointer hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
-                >
-                  {type === 'multi' && (
-                    <div className={['w-4 h-4 rounded-[4px] border flex items-center justify-center mr-2.5 flex-shrink-0', isSelected ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)]' : 'border-[var(--color-border-focus)]'].join(' ')}>
-                      {isSelected && <Check size={9} strokeWidth={2.5} className="text-[var(--color-bg-page)]" />}
-                    </div>
+                <li key={option.value} role="option" aria-selected={isSelected}>
+                  {showGroup && (
+                    <div className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">{option.group}</div>
                   )}
-                  <span className="flex-1">{option.label}</span>
-                  {type === 'single' && isSelected && <Check size={16} className="text-[var(--color-text-primary)]" />}
+                  <div
+                    onClick={() => handleSelect(option.value)}
+                    className="flex items-center justify-between px-3 py-2 text-sm text-[var(--color-text-primary)] cursor-pointer hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
+                  >
+                    {type === 'multi' && (
+                      <div className={['w-4 h-4 rounded-[4px] border flex items-center justify-center mr-2.5 flex-shrink-0', isSelected ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)]' : 'border-[var(--color-border-focus)]'].join(' ')}>
+                        {isSelected && <Check size={9} strokeWidth={2.5} className="text-[var(--color-bg-page)]" />}
+                      </div>
+                    )}
+                    <span className="flex-1">{option.label}</span>
+                    {type === 'single' && isSelected && <Check size={16} className="text-[var(--color-text-primary)]" />}
+                  </div>
                 </li>
               )
             })}
