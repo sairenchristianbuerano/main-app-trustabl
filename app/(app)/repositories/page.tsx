@@ -417,7 +417,7 @@ export default function RepositoriesPage() {
             <Tooltip content="Scan" position="top">
               <Button variant="text" size="sm" icon={RefreshCw} iconOnly onClick={() => handleScan([row.id])} aria-label="Scan" />
             </Tooltip>
-            {s !== 'not_scanned' && s !== 'scanning' && a === 'not_run' && (
+            {s !== 'not_scanned' && a === 'not_run' && (
               <Tooltip content="Run autofix" position="top">
                 <Button variant="text" size="sm" icon={Play} iconOnly onClick={() => handleRunAutofix([row.id])} aria-label="Run autofix" />
               </Tooltip>
