@@ -22,7 +22,7 @@ export default function GitHubAuthPage() {
         {/* Logo connection */}
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] flex items-center justify-center p-2">
-            <Image src="/teal.svg" alt="Trustabl" width={28} height={28} />
+            <Image src="/teal.svg" alt="Trustabl" width={28} height={28} className="w-[28px] h-[28px]" />
           </div>
           <div className="flex items-center gap-1">
             <span className="w-12 border-t border-dashed border-[var(--color-border-muted)]" />

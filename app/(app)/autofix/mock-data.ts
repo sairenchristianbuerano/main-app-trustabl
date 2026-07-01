@@ -146,6 +146,14 @@ function generateReplacement(finding: { location: string; policyId: string }): s
   return `// ${file}:${line}\n// Fixed implementation\nfunction handle() {\n  const validated = validate(input)\n  try {\n    return process(validated)\n  } catch (err) {\n    logger.error('${finding.policyId}', { err })\n    return fallback(err)\n  }\n}`
 }
 
+// Autofix tab uses a 3-level severity (critical/warning/info), collapsed from the
+// scanner's 4-level severity (critical/high/medium/low). Scanner tab keeps the original 4.
+function toAutofixSeverity(severity: string): 'critical' | 'warning' | 'info' {
+  if (severity === 'critical') return 'critical'
+  if (severity === 'high' || severity === 'medium') return 'warning'
+  return 'info'
+}
+
 export function getAutofixSession(repoName: string): AutofixSession | null {
   const detail = MOCK_DETAILS[repoName]
   if (!detail) return null
@@ -176,7 +184,7 @@ export function getAutofixSession(repoName: string): AutofixSession | null {
     return {
       finding_id: `af-${repoName}-${f.id}`,
       rule_id: f.policyId,
-      severity: f.severity,
+      severity: toAutofixSeverity(f.severity),
       title: f.title,
       scope: f.scope,
       tool_name: f.tool_name,

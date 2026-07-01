@@ -7,7 +7,7 @@ interface FormSectionProps {
 interface FormLayoutProps {
   title: string
   onSubmit: (e: React.FormEvent) => void
-  footer: React.ReactNode
+  footer?: React.ReactNode
   children: React.ReactNode
   maxWidth?: number
 }
@@ -39,9 +39,11 @@ export function FormLayout({ title, onSubmit, footer, children, maxWidth = 640 }
         {children}
       </div>
 
-      <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[var(--color-border-muted)]">
-        {footer}
-      </div>
+      {footer && (
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[var(--color-border-muted)]">
+          {footer}
+        </div>
+      )}
     </form>
   )
 }

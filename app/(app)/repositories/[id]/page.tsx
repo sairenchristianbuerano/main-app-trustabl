@@ -3,11 +3,11 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ChevronDown, RefreshCw, Download,
-  CheckCircle, EyeOff, Shield, Circle,
+  CheckCircle, EyeOff, Shield, Eye, Circle,
   Sparkles, Info, AlertTriangle, RotateCcw, Settings, Filter,
-  Wand2, Play, Loader2, Check, X, GitBranch, Lock, FileText, Copy, ScanSearch, Search,
+  Wand2, Play, Loader2, Check, X, FileText, Copy, ScanSearch, Search,
 } from 'lucide-react'
-import { Button, Badge, Pagination, Dropdown, Tabs, Checkbox, Spinner, Tooltip, Modal, InputField } from '@/components/ui'
+import { Button, Badge, Pagination, Dropdown, Tabs, Checkbox, Spinner, Tooltip, Modal, InputField, FeatureGateModal, type FeatureGate } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { EmptyState } from '@/components/patterns/EmptyState'
 import { useToast } from '@/components/ui/ToastContext'
@@ -37,6 +37,14 @@ const severityStyles: Record<string, { color: string; label: string }> = {
   high: { color: 'var(--color-warning-text)', label: 'HIGH' },
   medium: { color: 'var(--color-info-text)', label: 'MED' },
   low: { color: 'var(--color-text-tertiary)', label: 'LOW' },
+}
+
+// Autofix tab uses a 3-level severity (critical/warning/info), separate from the
+// scanner tab's 4-level severity above.
+const afSeverityStyles: Record<string, { color: string; label: string }> = {
+  critical: { color: 'var(--color-danger-text)', label: 'CRIT' },
+  warning: { color: 'var(--color-warning-text)', label: 'WARN' },
+  info: { color: 'var(--color-info-text)', label: 'INFO' },
 }
 
 const ENRICHMENT_STEPS = [
@@ -108,23 +116,26 @@ export default function RepoDetailPage() {
 
   const [topTab, setTopTab] = useState<'analysis' | 'autofix'>(searchParams.get('tab') === 'autofix' ? 'autofix' : 'analysis')
 
-  // ─── LLM config (shared) ───
+  // ─── Feature flags ───
   const [llmConfigured, setLlmConfigured] = useState(false)
-  const [showLLMModal, setShowLLMModal] = useState(false)
+  const [autofixEnabled, setAutofixEnabled] = useState(false)
+  const [enrichmentEnabled, setEnrichmentEnabled] = useState(false)
+  const [gateModal, setGateModal] = useState<FeatureGate | null>(null)
 
   useEffect(() => {
-    const checkLLM = () => {
-      const config = localStorage.getItem('llm_config')
-      if (config) {
-        const parsed = JSON.parse(config)
-        setLlmConfigured(!!(parsed.provider && parsed.api_key))
-      } else {
-        setLlmConfigured(false)
-      }
+    const checkConfig = () => {
+      try {
+        const llm = localStorage.getItem('llm_config')
+        setLlmConfigured(!!(llm && JSON.parse(llm).api_key))
+        const features = localStorage.getItem('features_config')
+        const f = features ? JSON.parse(features) : {}
+        setAutofixEnabled(!!f.autofix)
+        setEnrichmentEnabled(!!f.enrichment)
+      } catch { /* ignore */ }
     }
-    checkLLM()
-    window.addEventListener('focus', checkLLM)
-    return () => window.removeEventListener('focus', checkLLM)
+    checkConfig()
+    window.addEventListener('focus', checkConfig)
+    return () => window.removeEventListener('focus', checkConfig)
   }, [])
 
   const isLLMConfigured = useCallback(() => llmConfigured, [llmConfigured])
@@ -158,7 +169,7 @@ export default function RepoDetailPage() {
   const getEnrichState = (id: string): EnrichmentState => enrichmentStates[id] || 'none'
 
   const enrichFinding = useCallback((findingId: string) => {
-    if (!isLLMConfigured()) { setShowLLMModal(true); return }
+    if (!llmConfigured || !enrichmentEnabled) { setGateModal('enrichment'); return }
     setEnrichmentStates(prev => ({ ...prev, [findingId]: 'enriching' }))
     setEnrichmentProgress(prev => ({ ...prev, [findingId]: 0 }))
     const willFail = Math.random() < 0.15
@@ -180,16 +191,16 @@ export default function RepoDetailPage() {
       }
     }, 1200)
     enrichTimers.current[findingId] = interval
-  }, [isLLMConfigured])
+  }, [llmConfigured, enrichmentEnabled])
 
   const enrichSelected = useCallback(() => {
-    if (!isLLMConfigured()) { setShowLLMModal(true); return }
+    if (!llmConfigured || !enrichmentEnabled) { setGateModal('enrichment'); return }
     selectedFindings.forEach(id => {
       const f = findingsState.find(fi => fi.id === id)
       const state = getEnrichState(id)
       if (f && (state === 'none' || state === 'failed') && canEnrich(f)) enrichFinding(id)
     })
-  }, [selectedFindings, enrichmentStates, findingsState, enrichFinding, isLLMConfigured]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFindings, enrichmentStates, findingsState, enrichFinding, llmConfigured, enrichmentEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ignoreSelected = useCallback(() => {
     setFindingsState(prev => prev.map(f =>
@@ -304,7 +315,7 @@ export default function RepoDetailPage() {
 
 
   const startAutofix = useCallback(() => {
-    if (!isLLMConfigured()) { setShowLLMModal(true); return }
+    if (!llmConfigured || !autofixEnabled) { setGateModal('autofix'); return }
     setAfPageState('running'); setAfRunStep(0); setAfFindingProgress({})
     let step = 0
     afRunTimer.current = setInterval(() => {
@@ -320,7 +331,7 @@ export default function RepoDetailPage() {
         } else {
           const mockFindings: AutofixFinding[] = Array.from({ length: 6 }, (_, i) => ({
             finding_id: `af-${slug}-gen-${i}`, rule_id: `CAGENT-0${50 + i}`,
-            severity: ['critical', 'high', 'medium', 'low'][i % 4],
+            severity: ['critical', 'warning', 'info'][i % 3],
             title: ['No error handling on LLM calls', 'Missing input validation', 'No retry mechanism', 'Hardcoded configuration', 'Missing structured logging', 'No rate limiting'][i],
             scope: ['agent', 'skill', 'tool'][i % 3], tool_name: ['agent-lint', 'prompt-guard', 'semgrep'][i % 3],
             file_path: `src/${['agent', 'skill', 'tool'][i % 3]}s/main.ts`, start_line: 10 + i * 15, end_line: 18 + i * 15, fix_status: 'ready' as FixStatus,
@@ -336,7 +347,7 @@ export default function RepoDetailPage() {
         toast('Autofix complete')
       }
     }, 1500)
-  }, [isLLMConfigured, slug, toast])
+  }, [llmConfigured, autofixEnabled, slug, toast])
 
   const acceptFix = useCallback((id: string) => {
     setAfFindings(prev => prev.map(f => f.finding_id === id ? { ...f, fix_status: 'applied' as FixStatus, applied_at: 'Just now', applied_by: 'Zane F.' } : f))
@@ -435,7 +446,10 @@ export default function RepoDetailPage() {
             { label: 'Autofix', value: 'autofix', icon: Wand2 },
           ]}
           value={topTab}
-          onChange={(v) => setTopTab(v as 'analysis' | 'autofix')}
+          onChange={(v) => {
+            if (v === 'autofix' && !autofixEnabled) { setGateModal('autofix'); return }
+            setTopTab(v as 'analysis' | 'autofix')
+          }}
         />
       </div>
 
@@ -777,21 +791,67 @@ export default function RepoDetailPage() {
           <>
             {/* Empty state */}
             {afPageState === 'empty' && (
-              <div className="flex flex-col items-center pt-8 gap-6">
-                <div className="w-full max-w-[720px] flex flex-col gap-6">
-                  <EmptyState icon={Wand2} title="No autofix results yet" description="Run autofix to automatically generate code fixes for this repository. Review each fix before applying." action={{ label: 'Scan', onClick: startAutofix }} />
-                  <div className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-5 flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <Info size={16} className="text-[var(--color-info-text)]" />
-                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">What autofix does</p>
+              <div className="flex-1 flex items-center justify-center px-4 py-8">
+                <div className="w-full max-w-[640px] flex flex-col items-center gap-8">
+
+                  {/* Icon with radial glow */}
+                  <div className="flex flex-col items-center gap-5 text-center">
+                    <div className="relative flex items-center justify-center">
+                      <div
+                        className="absolute rounded-full"
+                        style={{
+                          width: 180,
+                          height: 180,
+                          background: 'radial-gradient(circle, rgba(109,40,217,0.08) 0%, transparent 70%)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                      <div
+                        className="relative w-16 h-16 rounded-[var(--radius-card)] flex items-center justify-center"
+                        style={{ backgroundColor: 'rgba(109, 40, 217, 0.18)' }}
+                      >
+                        <Wand2 size={28} style={{ color: '#A78BFA' }} />
+                      </div>
                     </div>
-                    <ul className="flex flex-col gap-2 pl-6 text-sm text-[var(--color-text-secondary)]">
-                      <li className="list-disc">Runs findings through sandbox environment</li>
-                      <li className="list-disc">Generates exact code fixes per finding</li>
-                      <li className="list-disc">Shows diff for your review</li>
-                      <li className="list-disc">You accept or reject each fix</li>
-                    </ul>
+                    <div className="flex flex-col gap-1.5">
+                      <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">Autofix is ready to run</h2>
+                      <p className="text-[13px] text-[var(--color-text-secondary)] leading-relaxed max-w-[380px]">
+                        Generate exact code fixes for your findings. Review each diff and apply with confidence.
+                      </p>
+                    </div>
                   </div>
+
+                  {/* 3-column feature highlights */}
+                  <div className="w-full grid grid-cols-3 gap-3">
+                    {([
+                      { icon: Sparkles, title: 'AI-generated fixes',   text: 'Each finding gets an exact code fix with a diff to review',              iconStyle: { color: '#A78BFA' }, bgStyle: { backgroundColor: 'rgba(109,40,217,0.14)' } },
+                      { icon: Eye,      title: 'You stay in control',   text: 'Accept or reject every fix individually before anything changes',        iconStyle: { color: 'var(--color-accent-default)' }, bgStyle: { backgroundColor: 'var(--color-accent-subtle)' } },
+                      { icon: Shield,   title: 'Sandboxed execution',   text: 'Fixes run in an isolated environment before being proposed to you',      iconStyle: { color: 'var(--color-success-text)' }, bgStyle: { backgroundColor: 'var(--color-success-bg)' } },
+                    ] as const).map(({ icon: Icon, title, text, iconStyle, bgStyle }) => (
+                      <div key={title} className="flex flex-col gap-3 p-4 rounded-[var(--radius-card)] bg-[var(--color-bg-surface)]">
+                        <div className="w-8 h-8 rounded-[var(--radius-sharp)] flex items-center justify-center flex-shrink-0" style={bgStyle}>
+                          <Icon size={14} style={iconStyle} />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">{title}</p>
+                          <p className="text-[11px] text-[var(--color-text-tertiary)] leading-relaxed">{text}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* CTA */}
+                  <div className="flex flex-col items-center gap-2 -mt-2">
+                    {repoEntry?.scanner.status && repoEntry.scanner.status !== 'not_scanned' && repoEntry.scanner.status !== 'scanning' ? (
+                      <Button icon={Wand2} onClick={startAutofix}>Run autofix</Button>
+                    ) : (
+                      <>
+                        <Button variant="secondary" icon={RefreshCw} onClick={() => setTopTab('analysis')}>Run scan first</Button>
+                        <p className="text-xs text-[var(--color-text-tertiary)]">Run a scan first to detect findings</p>
+                      </>
+                    )}
+                  </div>
+
                 </div>
               </div>
             )}
@@ -918,7 +978,7 @@ export default function RepoDetailPage() {
                         const isDimmed = finding.fix_status === 'applied' || finding.fix_status === 'rejected'
                         const isSelected = afSelectedFindings.has(finding.finding_id)
                         const badge = fixStatusBadge[finding.fix_status]
-                        const sev = severityStyles[finding.severity] || severityStyles.medium
+                        const sev = afSeverityStyles[finding.severity] || afSeverityStyles.warning
                         return (
                           <div key={finding.finding_id} className={['border-b border-[var(--color-border-muted)] last:border-b-0 last:rounded-b-[var(--radius-base)]', isDimmed ? 'opacity-50' : ''].filter(Boolean).join(' ')}>
                             <div className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-[var(--color-bg-surface)] transition-colors">
@@ -1129,15 +1189,7 @@ export default function RepoDetailPage() {
         </Modal>
       )}
 
-      {/* LLM modal */}
-      <Modal open={showLLMModal} onClose={() => setShowLLMModal(false)} title="LLM not configured" footer={
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowLLMModal(false)}>Cancel</Button>
-          <Button variant="primary" size="sm" icon={Settings} onClick={() => { setShowLLMModal(false); router.push('/settings') }}>Go to Settings</Button>
-        </div>
-      }>
-        <p className="text-sm text-[var(--color-text-primary)]">You need to configure an LLM provider. Add your API key in Settings to continue.</p>
-      </Modal>
+      {gateModal && <FeatureGateModal open={!!gateModal} feature={gateModal} onClose={() => setGateModal(null)} />}
     </main>
     </div>
   )

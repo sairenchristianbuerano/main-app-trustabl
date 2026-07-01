@@ -17,9 +17,8 @@ import {
 
 const severityStyles: Record<string, { color: string; label: string }> = {
   critical: { color: 'var(--color-danger-text)', label: 'CRIT' },
-  high: { color: 'var(--color-warning-text)', label: 'HIGH' },
-  medium: { color: 'var(--color-info-text)', label: 'MED' },
-  low: { color: 'var(--color-text-tertiary)', label: 'LOW' },
+  warning: { color: 'var(--color-warning-text)', label: 'WARN' },
+  info: { color: 'var(--color-info-text)', label: 'INFO' },
 }
 
 const fixStatusBadge: Record<FixStatus, { label: string; variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger' } | null> = {
@@ -515,7 +514,7 @@ export default function AutofixDetailPage() {
                   const isDimmed = finding.fix_status === 'applied' || finding.fix_status === 'rejected'
                   const isSelected = selectedFindings.has(finding.finding_id)
                   const badge = fixStatusBadge[finding.fix_status]
-                  const sev = severityStyles[finding.severity] || severityStyles.medium
+                  const sev = severityStyles[finding.severity] || severityStyles.warning
 
                   return (
                     <div key={finding.finding_id} className={['border-b border-[var(--color-border-muted)] last:border-b-0 last:rounded-b-[var(--radius-base)]', isDimmed ? 'opacity-50' : ''].filter(Boolean).join(' ')}>

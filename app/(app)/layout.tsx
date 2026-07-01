@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Gauge, FolderGit2, ChevronRight, RotateCcw } from 'lucide-react'
+import { RepoProvider } from '@/app/(app)/repositories/RepoContext'
 import { Sidebar } from '@/components/patterns/Sidebar'
-import { Modal, Button, Dropdown } from '@/components/ui'
+import { SettingsSidebar } from '@/components/patterns/SettingsSidebar'
+import { Modal, Button, Dropdown, NotificationBell } from '@/components/ui'
 import { useToast } from '@/components/ui/ToastContext'
 
 const navItems = [
@@ -26,6 +28,8 @@ const subjectOptions = [
   { label: 'Sales', value: 'Sales' },
   { label: 'Other', value: 'Other' },
 ]
+
+const MOCK_PROVIDER = 'google'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -59,29 +63,50 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const segments = pathname.split('/').filter(Boolean)
   const activeValue = segments[0] || ''
+  const isSettings = activeValue === 'settings'
   const title = pageTitles[activeValue] || ''
   const isSubpage = (activeValue === 'repositories' || activeValue === 'autofix') && segments.length > 1
 
+  useEffect(() => {
+    if (!isSettings) sessionStorage.setItem('settings_back_path', pathname)
+  }, [pathname, isSettings])
+
+  const handleSettingsBack = () => {
+    router.push(sessionStorage.getItem('settings_back_path') || '/repositories')
+  }
+
+  const settingsSection = segments[1] || 'account'
+  const settingsTitle = 'Settings'
+
   return (
+    <RepoProvider initialProvider={MOCK_PROVIDER}>
     <div className="flex h-screen w-screen bg-[var(--color-bg-page)] overflow-hidden">
       <div className="flex-shrink-0 overflow-hidden">
-        <Sidebar
-          items={navItems}
-          activeValue={activeValue}
-          onNavigate={(v) => router.push(`/${v}`)}
-          brand="trustabl"
-          username="project-zane2127967"
-          email="Project"
-          onLogout={() => router.push('/')}
-          onAccount={() => router.push('/settings')}
-          onInvite={() => router.push('/members')}
-          onViewPlans={() => router.push('/pricing')}
-          onContactUs={() => setContactOpen(true)}
-        />
+        {isSettings ? (
+          <SettingsSidebar
+            activeValue={settingsSection}
+            onNavigate={(v) => router.push(`/settings/${v}`)}
+            onBack={handleSettingsBack}
+          />
+        ) : (
+          <Sidebar
+            items={navItems}
+            activeValue={activeValue}
+            onNavigate={(v) => router.push(`/${v}`)}
+            brand="trustabl"
+            username="Trustabl"
+            onLogout={() => router.push('/')}
+            onAccount={() => router.push('/settings')}
+            onViewPlans={() => router.push('/pricing')}
+            onContactUs={() => setContactOpen(true)}
+          />
+        )}
       </div>
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="flex-shrink-0 h-[52px] flex items-center justify-between border-b border-[var(--color-border-muted)] px-6" style={{ zIndex: 'var(--z-overlay)' }}>
-          {isSubpage ? (
+          {isSettings ? (
+            <h1 className="text-sm font-medium text-[var(--color-text-primary)]">{settingsTitle}</h1>
+          ) : isSubpage ? (
             <div className="flex items-center gap-1.5 text-sm">
               <button onClick={() => router.push(`/${activeValue}`)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] font-medium transition-colors">{pageTitles[activeValue] || activeValue}</button>
               <ChevronRight size={14} className="text-[var(--color-text-tertiary)]" />
@@ -90,10 +115,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           ) : (
             <h1 className="text-sm font-medium text-[var(--color-text-primary)]">{title}</h1>
           )}
-          <button onClick={() => window.location.href = '/dashboard'} className="flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
-            <RotateCcw size={14} />
-            Reset
-          </button>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <div className="w-px h-4 bg-[var(--color-border-muted)]" />
+            <button onClick={() => window.location.href = '/dashboard'} className="flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          </div>
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
           {children}
@@ -136,5 +165,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </Modal>
     </div>
+    </RepoProvider>
   )
 }

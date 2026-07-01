@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { ChevronsUpDown, PanelLeft, Settings, UserPlus, ArrowLeftRight, LogOut, Mail, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
+import { ChevronsUpDown, PanelLeft, Settings, LogOut, Mail, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
 import { NavItem, Divider } from '@/components/ui'
 
 function SidebarTooltip({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
@@ -75,16 +75,14 @@ interface SidebarProps {
   onProfileClick?: () => void
   onLogout?: () => void
   onAccount?: () => void
-  onInvite?: () => void
   onViewPlans?: () => void
   onContactUs?: () => void
   brand?: string
   username?: string
-  email?: string
 }
 
 export function Sidebar({
-  items, activeValue, onNavigate, onNewComponent, onCollapse, onProfileClick, onLogout, onAccount, onInvite, onViewPlans, onContactUs, brand = 'ComponentFactory', username, email,
+  items, activeValue, onNavigate, onNewComponent, onCollapse, onProfileClick, onLogout, onAccount, onViewPlans, onContactUs, brand = 'ComponentFactory', username,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -186,7 +184,7 @@ export function Sidebar({
       </div>
 
       <div className={['flex flex-col gap-1 pb-2 border-t border-[var(--color-border-muted)] pt-2', collapsed ? 'items-center' : 'px-2'].join(' ')}>
-        {!collapsed && (
+        {false && !collapsed && (
           <div className="rounded-[var(--radius-sharp)] bg-[var(--color-bg-raised)] border border-[var(--color-border-muted)] p-3 flex flex-col gap-2 mb-1">
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-[var(--color-accent-default)]" />
@@ -239,7 +237,7 @@ export function Sidebar({
               {(username ?? brand)?.[0]?.toUpperCase()}
             </div>
             <div className="flex flex-col min-w-0">
-              {email && <span className="text-[11px] text-[var(--color-text-tertiary)] truncate">{email}</span>}
+              <span className="text-[11px] text-[var(--color-text-tertiary)] truncate">Organization</span>
               <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{username ?? brand}</span>
             </div>
           </div>
@@ -250,13 +248,6 @@ export function Sidebar({
           >
             <Settings size={16} />
             Settings
-          </button>
-          <button
-            onClick={() => { onInvite?.(); setMenuOpen(false) }}
-            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
-          >
-            <UserPlus size={16} />
-            Invite Members
           </button>
           <Divider />
           <button

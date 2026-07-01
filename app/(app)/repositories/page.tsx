@@ -3,15 +3,16 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ScanSearch, RefreshCw, Search, Loader2, Play,
-  Trash2, Filter, ArrowRight, Eye, Wand2,
+  Trash2, Filter, ArrowRight, Wand2, Bell, BellOff, MoreVertical,
 } from 'lucide-react'
 import {
   Button, Badge, Table, InputField, Dropdown,
-  Pagination, Modal,
+  Pagination, Modal, FeatureGateModal,
 } from '@/components/ui'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { EmptyState } from '@/components/patterns/EmptyState'
 import { useToast } from '@/components/ui/ToastContext'
+import { useNotifications } from '@/components/ui/NotificationContext'
 import { GitHubIcon } from './GitHubIcon'
 import { GitHubConnectModal } from './GitHubConnectModal'
 import { RepoSelectorModal, type RepoItem } from './RepoSelectorModal'
@@ -61,11 +62,13 @@ function autofixGateStatus(r: ImportedRepo): { label: string; variant: 'success'
 export default function RepositoriesPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { repos, setRepos, githubConnected, setGithubConnected } = useRepos()
+  const { addNotification, startBatch, reportScanResult, reportAutofixResult } = useNotifications()
+  const { repos, setRepos, githubConnected, setGithubConnected, toggleMute } = useRepos()
 
   const [connectOpen, setConnectOpen] = useState(false)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ImportedRepo | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilters, setActiveFilters] = useState<string[]>([])
@@ -76,21 +79,28 @@ export default function RepositoriesPage() {
   const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT)
 
   const [llmConfigured, setLlmConfigured] = useState(false)
-  const [showLLMModal, setShowLLMModal] = useState(false)
+  const [autofixEnabled, setAutofixEnabled] = useState(false)
+  const [showGateModal, setShowGateModal] = useState(false)
 
   useEffect(() => {
-    const checkLLM = () => {
-      const config = localStorage.getItem('llm_config')
-      if (config) {
-        const parsed = JSON.parse(config)
-        setLlmConfigured(!!(parsed.provider && parsed.api_key))
-      } else {
-        setLlmConfigured(false)
-      }
+    if (!openMenuId) return
+    const handler = () => setOpenMenuId(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [openMenuId])
+
+  useEffect(() => {
+    const checkConfig = () => {
+      try {
+        const llm = localStorage.getItem('llm_config')
+        setLlmConfigured(!!(llm && JSON.parse(llm).api_key))
+        const features = localStorage.getItem('features_config')
+        setAutofixEnabled(!!(features && JSON.parse(features).autofix))
+      } catch { /* ignore */ }
     }
-    checkLLM()
-    window.addEventListener('focus', checkLLM)
-    return () => window.removeEventListener('focus', checkLLM)
+    checkConfig()
+    window.addEventListener('focus', checkConfig)
+    return () => window.removeEventListener('focus', checkConfig)
   }, [])
 
   const languages = useMemo(() => [...new Set(repos.map(r => r.language))].sort(), [repos])
@@ -177,6 +187,19 @@ export default function RepositoriesPage() {
             last_activity: { type: 'scan' as const, timestamp: 'Just now', by: 'Zane F.' },
           }
         }))
+        const detail = getRepoDetail(repo.name)
+        const scanStatus = detail.repo.gate_status === 'pass' ? 'pass' : detail.repo.readiness_score >= 50 ? 'warning' : 'fail'
+        const inBatch = reportScanResult(repo.id, scanStatus)
+        if (!inBatch) {
+          addNotification({
+            type: 'scan_completed',
+            content: `Scan completed — ${repo.name} · ${scanStatus}, ${detail.repo.findings_count} findings`,
+            status: scanStatus,
+            link: { page: 'repositories', params: { repo: repo.name } },
+            batch_id: null,
+            batch_summary: null,
+          })
+        }
         scanTimers.current.delete(repo.id)
       }, delay)
       scanTimers.current.set(repo.id, timer)
@@ -185,7 +208,7 @@ export default function RepositoriesPage() {
       scanTimers.current.forEach(t => clearTimeout(t))
       scanTimers.current.clear()
     }
-  }, [repos])
+  }, [repos, addNotification, reportScanResult])
 
   // --- Autofix completion simulation ---
   const autofixTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -195,10 +218,10 @@ export default function RepositoriesPage() {
     for (const repo of running) {
       if (autofixTimers.current.has(repo.id)) continue
       const delay = 4000 + Math.random() * 3000
+      const fixesReady = 5 + Math.floor(Math.random() * 10)
       const timer = setTimeout(() => {
         setRepos(prev => prev.map(r => {
           if (r.id !== repo.id) return r
-          const fixesReady = 5 + Math.floor(Math.random() * 10)
           const total = fixesReady + (r.autofix.fixes_applied ?? 0)
           return {
             ...r,
@@ -215,6 +238,16 @@ export default function RepositoriesPage() {
           }
         }))
         toast(`Autofix complete for ${repo.name}`)
+        const inBatch = reportAutofixResult(repo.id, fixesReady)
+        if (!inBatch) {
+          addNotification({
+            type: 'autofix_completed',
+            content: `Autofix completed — ${fixesReady} fixes ready in ${repo.name}`,
+            link: { page: 'repositories', params: { repo: repo.name, tab: 'autofix' } },
+            batch_id: null,
+            batch_summary: null,
+          })
+        }
         autofixTimers.current.delete(repo.id)
       }, delay)
       autofixTimers.current.set(repo.id, timer)
@@ -223,7 +256,27 @@ export default function RepositoriesPage() {
       autofixTimers.current.forEach(t => clearTimeout(t))
       autofixTimers.current.clear()
     }
-  }, [repos, toast])
+  }, [repos, toast, addNotification, reportAutofixResult])
+
+  // --- Simulated teammate activity (individual, non-batched) ---
+  const teammateFixFired = useRef(false)
+  useEffect(() => {
+    if (teammateFixFired.current || repos.length === 0) return
+    teammateFixFired.current = true
+    const teammates = ['Charlie', 'Diana']
+    const timer = setTimeout(() => {
+      const repo = repos[Math.floor(Math.random() * repos.length)]
+      const teammate = teammates[Math.floor(Math.random() * teammates.length)]
+      addNotification({
+        type: 'fix_applied',
+        content: `${teammate} applied a fix in ${repo.name}`,
+        link: { page: 'repositories', params: { repo: repo.name, tab: 'autofix' } },
+        batch_id: null,
+        batch_summary: null,
+      })
+    }, 20000 + Math.random() * 10000)
+    return () => clearTimeout(timer)
+  }, [repos, addNotification])
 
   // --- Handlers ---
   const handleAddRepo = useCallback(() => {
@@ -261,11 +314,13 @@ export default function RepositoriesPage() {
         last_run_by: null,
       },
       last_activity: { type: 'scan' as const, timestamp: 'In progress', by: 'Zane F.' },
+      notifications_muted: false,
     }))
+    if (newRepos.length >= 2) startBatch('scan', newRepos.map(r => r.id))
     setRepos(prev => [...prev, ...newRepos])
     setSelectorOpen(false)
     toast(`${imported.length} repositor${imported.length > 1 ? 'ies' : 'y'} imported successfully`)
-  }, [toast])
+  }, [toast, startBatch])
 
   const handleSort = useCallback((key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -273,6 +328,7 @@ export default function RepositoriesPage() {
   }, [sortKey])
 
   const handleScan = useCallback((ids: string[]) => {
+    if (ids.length >= 2) startBatch('scan', ids)
     setRepos(prev => prev.map(r => {
       if (!ids.includes(r.id)) return r
       return {
@@ -283,13 +339,14 @@ export default function RepositoriesPage() {
     }))
     toast(`Scanning ${ids.length} repositor${ids.length > 1 ? 'ies' : 'y'}`)
     setSelectedIds([])
-  }, [toast])
+  }, [toast, startBatch])
 
   const handleRunAutofix = useCallback((ids: string[]) => {
-    if (!llmConfigured) {
-      setShowLLMModal(true)
+    if (!llmConfigured || !autofixEnabled) {
+      setShowGateModal(true)
       return
     }
+    if (ids.length >= 2) startBatch('autofix', ids)
     setRepos(prev => prev.map(r => {
       if (!ids.includes(r.id)) return r
       return {
@@ -300,7 +357,7 @@ export default function RepositoriesPage() {
     }))
     toast(`Autofix started for ${ids.length} repositor${ids.length > 1 ? 'ies' : 'y'}`)
     setSelectedIds([])
-  }, [llmConfigured, toast])
+  }, [llmConfigured, autofixEnabled, setShowGateModal, toast, startBatch])
 
   const handleDelete = useCallback((ids: string[]) => {
     setRepos(prev => prev.filter(r => !ids.includes(r.id)))
@@ -409,22 +466,14 @@ export default function RepositoriesPage() {
       render: (_: unknown, row: ImportedRepo) => {
         const s = row.scanner.status
         const a = row.autofix.status
-        if (s === 'scanning') {
+        if (s === 'scanning' || a === 'running') {
           return <span className="text-sm text-[var(--color-text-tertiary)]">—</span>
         }
         return (
           <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <Tooltip content="Scan" position="top">
-              <Button variant="text" size="sm" icon={RefreshCw} iconOnly onClick={() => handleScan([row.id])} aria-label="Scan" />
-            </Tooltip>
             {s !== 'not_scanned' && a === 'not_run' && (
               <Tooltip content="Run autofix" position="top">
                 <Button variant="text" size="sm" icon={Play} iconOnly onClick={() => handleRunAutofix([row.id])} aria-label="Run autofix" />
-              </Tooltip>
-            )}
-            {a === 'running' && (
-              <Tooltip content="View progress" position="top">
-                <Button variant="text" size="sm" icon={Eye} iconOnly onClick={() => router.push(`/repositories/${encodeURIComponent(row.name)}?tab=autofix`)} aria-label="View progress" />
               </Tooltip>
             )}
             {(a === 'ready' || a === 'all_applied' || a === 'rejected') && (
@@ -432,20 +481,51 @@ export default function RepositoriesPage() {
                 <Button variant="text" size="sm" icon={ArrowRight} iconOnly onClick={() => router.push(`/repositories/${encodeURIComponent(row.name)}?tab=autofix`)} aria-label="Review fixes" />
               </Tooltip>
             )}
-            <Tooltip content="Delete" position="top">
+            <div className="relative" onClick={e => e.stopPropagation()}>
               <button
-                onClick={() => setDeleteTarget(row)}
-                className="w-[36px] h-[36px] inline-flex items-center justify-center rounded-[var(--radius-base)] text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] transition-[background] duration-150"
-                aria-label="Delete"
+                onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
+                className="w-[36px] h-[36px] inline-flex items-center justify-center rounded-[var(--radius-base)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
+                aria-label="More actions"
               >
-                <Trash2 size={16} />
+                <MoreVertical size={16} />
               </button>
-            </Tooltip>
+              {openMenuId === row.id && (
+                <div
+                  className="absolute right-0 top-full mt-1 w-[188px] rounded-[var(--radius-base)] border border-[var(--color-border-muted)] bg-[var(--color-bg-overlay)] shadow-[var(--shadow-float)] flex flex-col overflow-hidden animate-[fadeScale_150ms_ease-out]"
+                  style={{ zIndex: 'var(--z-dropdown)' }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => { handleScan([row.id]); setOpenMenuId(null) }}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-colors duration-150"
+                  >
+                    <RefreshCw size={14} className="text-[var(--color-text-tertiary)]" />
+                    Rescan
+                  </button>
+                  <div className="h-px bg-[var(--color-border-muted)]" />
+                  <button
+                    onClick={() => { toggleMute(row.id); toast(row.notifications_muted ? `${row.name} unmuted` : `${row.name} muted`); setOpenMenuId(null) }}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-colors duration-150"
+                  >
+                    {row.notifications_muted ? <BellOff size={14} className="text-[var(--color-text-tertiary)]" /> : <Bell size={14} className="text-[var(--color-text-tertiary)]" />}
+                    {row.notifications_muted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <div className="h-px bg-[var(--color-border-muted)]" />
+                  <button
+                    onClick={() => { setDeleteTarget(row); setOpenMenuId(null) }}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] transition-colors duration-150"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )
       },
     },
-  ], [handleScan, handleRunAutofix, router])
+  ], [handleScan, handleRunAutofix, toggleMute, toast, router, openMenuId])
 
   if (!hasRepos) {
     return (
@@ -563,22 +643,7 @@ export default function RepositoriesPage() {
         </p>
       </Modal>
 
-      {/* LLM modal */}
-      <Modal
-        open={showLLMModal}
-        onClose={() => setShowLLMModal(false)}
-        title="LLM not configured"
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowLLMModal(false)}>Cancel</Button>
-            <Button variant="primary" size="sm" onClick={() => { setShowLLMModal(false); router.push('/settings') }}>Go to Settings</Button>
-          </div>
-        }
-      >
-        <p className="text-sm text-[var(--color-text-primary)]">
-          You need to configure an LLM provider to use Autofix. Add your API key in Settings to continue.
-        </p>
-      </Modal>
+      <FeatureGateModal open={showGateModal} feature="autofix" onClose={() => setShowGateModal(false)} />
 
       <GitHubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onSuccess={handleGitHubConnect} />
       <RepoSelectorModal open={selectorOpen} onClose={() => setSelectorOpen(false)} onImport={handleImport} repos={availableToImport} />

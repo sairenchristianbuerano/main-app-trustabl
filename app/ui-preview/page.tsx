@@ -88,7 +88,6 @@ export default function UIPreviewPage() {
           onNavigate={noop}
           onNewComponent={noop}
           username="zanexflores"
-          email="zanexflores@gmail.com"
           onProfileClick={noop}
         />
       </div>

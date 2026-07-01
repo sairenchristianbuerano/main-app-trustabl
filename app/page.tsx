@@ -52,7 +52,7 @@ export default function Home() {
       <div className="w-full max-w-[440px] rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] overflow-hidden">
         <div className="flex flex-col items-center gap-6 px-6 py-10">
           {/* Logo */}
-          <Image src="/teal-txtwhiteteal.svg" alt="Trustabl" width={160} height={40} priority />
+          <Image src="/teal-txtwhiteteal.svg" alt="Trustabl" width={160} height={40} className="w-[160px] h-[40px]" priority />
 
           {/* Heading */}
           <div className="flex flex-col items-center gap-2 text-center">

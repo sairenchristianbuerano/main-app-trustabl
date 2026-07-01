@@ -35,6 +35,7 @@ interface ImportedRepo {
     timestamp: string | null
     by: string | null
   }
+  notifications_muted: boolean
 }
 
 interface RepoSessionState {
@@ -61,6 +62,7 @@ interface RepoContextValue {
   setRepos: React.Dispatch<React.SetStateAction<ImportedRepo[]>>
   githubConnected: boolean
   setGithubConnected: React.Dispatch<React.SetStateAction<boolean>>
+  toggleMute: (id: string) => void
   getSession: (slug: string) => Partial<RepoSessionState> | undefined
   updateSession: (slug: string, state: Partial<RepoSessionState>) => void
   clearSession: (slug: string) => void
@@ -121,13 +123,14 @@ function buildInitialRepos(): ImportedRepo[] {
         last_run_by: afLastBy,
       },
       last_activity: lastActivity,
+      notifications_muted: false,
     }
   })
 }
 
 export function RepoProvider({ children, initialProvider }: { children: ReactNode; initialProvider: string }) {
-  const [repos, setRepos] = useState<ImportedRepo[]>([])
-  const [githubConnected, setGithubConnected] = useState(initialProvider === 'github')
+  const [repos, setRepos] = useState<ImportedRepo[]>(() => buildInitialRepos())
+  const [githubConnected, setGithubConnected] = useState(true)
   const sessionsRef = useRef<Map<string, Partial<RepoSessionState>>>(new Map())
 
   const getSession = useCallback((slug: string) => {
@@ -143,8 +146,12 @@ export function RepoProvider({ children, initialProvider }: { children: ReactNod
     sessionsRef.current.delete(slug)
   }, [])
 
+  const toggleMute = useCallback((id: string) => {
+    setRepos(prev => prev.map(r => r.id === id ? { ...r, notifications_muted: !r.notifications_muted } : r))
+  }, [])
+
   return (
-    <RepoContext.Provider value={{ repos, setRepos, githubConnected, setGithubConnected, getSession, updateSession, clearSession }}>
+    <RepoContext.Provider value={{ repos, setRepos, githubConnected, setGithubConnected, toggleMute, getSession, updateSession, clearSession }}>
       {children}
     </RepoContext.Provider>
   )
