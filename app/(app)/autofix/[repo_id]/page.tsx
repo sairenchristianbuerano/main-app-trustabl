@@ -1,15 +1,16 @@
 'use client'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import {
   Wand2, Play, Download, RotateCcw, ChevronDown,
-  CheckCircle, XCircle, Circle, Loader2, Settings,
+  CheckCircle, XCircle, Circle, Loader2,
   Info, Check, X, GitBranch, Lock, Shield, FileText, Copy,
 } from 'lucide-react'
 import { Button, Badge, Tabs, Checkbox, Modal, Spinner } from '@/components/ui'
 import { EmptyState } from '@/components/patterns/EmptyState'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { useToast } from '@/components/ui/ToastContext'
+import { useAutofixPreflight } from '@/hooks/useAutofixPreflight'
 import {
   getAutofixSession, getAutofixRepos, generateAttestation,
   type AutofixFinding, type AutofixSession, type FixStatus, type AttestationData,
@@ -56,7 +57,6 @@ type PageState = 'empty' | 'running' | 'results'
 
 export default function AutofixDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const { toast } = useToast()
   const repoId = decodeURIComponent(params.repo_id as string)
 
@@ -70,27 +70,9 @@ export default function AutofixDetailPage() {
   const [attestation, setAttestation] = useState<AttestationData | null>(null)
   const [showPolicyModal, setShowPolicyModal] = useState(false)
 
-  const [llmConfigured, setLlmConfigured] = useState(false)
-  const [showLLMModal, setShowLLMModal] = useState(false)
-
   const [runStep, setRunStep] = useState(0)
   const [findingProgress, setFindingProgress] = useState<Record<string, number>>({})
   const runTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    const checkLLM = () => {
-      const config = localStorage.getItem('llm_config')
-      if (config) {
-        const parsed = JSON.parse(config)
-        setLlmConfigured(!!(parsed.provider && parsed.api_key))
-      } else {
-        setLlmConfigured(false)
-      }
-    }
-    checkLLM()
-    window.addEventListener('focus', checkLLM)
-    return () => window.removeEventListener('focus', checkLLM)
-  }, [])
 
   useEffect(() => {
     const existingSession = getAutofixSession(repoId)
@@ -116,14 +98,7 @@ export default function AutofixDetailPage() {
     }
   }, [])
 
-  const isLLMConfigured = useCallback(() => llmConfigured, [llmConfigured])
-
-  const startAutofix = useCallback(() => {
-    if (!isLLMConfigured()) {
-      setShowLLMModal(true)
-      return
-    }
-
+  const beginAutofixSimulation = useCallback(() => {
     setPageState('running')
     setRunStep(0)
     setFindingProgress({})
@@ -182,7 +157,9 @@ export default function AutofixDetailPage() {
         toast('Autofix complete')
       }
     }, 1500)
-  }, [isLLMConfigured, repoId, toast])
+  }, [repoId, toast])
+
+  const { run: runAutofixWithChecks, checking: checkingAutofix, modals: autofixPreflightModals } = useAutofixPreflight(beginAutofixSimulation)
 
   const acceptFix = useCallback((findingId: string) => {
     setFindings(prev => prev.map(f =>
@@ -256,8 +233,8 @@ export default function AutofixDetailPage() {
     setSelectedFindings(new Set())
     setExpandedFinding(null)
     setFilter('all')
-    startAutofix()
-  }, [startAutofix])
+    runAutofixWithChecks(repoId)
+  }, [runAutofixWithChecks, repoId])
 
   const filteredFindings = useMemo(() => {
     if (filter === 'all') return findings
@@ -316,7 +293,7 @@ export default function AutofixDetailPage() {
             icon={Wand2}
             title="No autofix results yet"
             description="Run autofix to automatically generate code fixes for this repository. Review each fix before applying."
-            action={{ label: 'Run autofix', onClick: startAutofix }}
+            action={{ label: checkingAutofix ? 'Checking...' : 'Run autofix', onClick: () => runAutofixWithChecks(repoId) }}
           />
 
           <div className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-5 flex flex-col gap-3">
@@ -333,21 +310,7 @@ export default function AutofixDetailPage() {
           </div>
         </div>
 
-        <Modal
-          open={showLLMModal}
-          onClose={() => setShowLLMModal(false)}
-          title="LLM not configured"
-          footer={
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setShowLLMModal(false)}>Cancel</Button>
-              <Button variant="primary" size="sm" icon={Settings} onClick={() => { setShowLLMModal(false); router.push('/settings') }}>Go to Settings</Button>
-            </div>
-          }
-        >
-          <p className="text-sm text-[var(--color-text-primary)]">
-            You need to configure an LLM provider to use Autofix. Add your API key in Settings to continue.
-          </p>
-        </Modal>
+        {autofixPreflightModals}
       </main>
     )
   }
@@ -438,7 +401,9 @@ export default function AutofixDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRerun}>Re-run</Button>
+                <Button variant="secondary" size="sm" icon={RotateCcw} loading={checkingAutofix} onClick={handleRerun}>
+                  {checkingAutofix ? 'Checking...' : 'Re-run'}
+                </Button>
                 <Button variant="secondary" size="sm" icon={Download} onClick={handleExportPatch}>Export patch</Button>
               </div>
             </div>
@@ -853,22 +818,7 @@ export default function AutofixDetailPage() {
         </Modal>
       )}
 
-      {/* LLM modal */}
-      <Modal
-        open={showLLMModal}
-        onClose={() => setShowLLMModal(false)}
-        title="LLM not configured"
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowLLMModal(false)}>Cancel</Button>
-            <Button variant="primary" size="sm" icon={Settings} onClick={() => { setShowLLMModal(false); router.push('/settings') }}>Go to Settings</Button>
-          </div>
-        }
-      >
-        <p className="text-sm text-[var(--color-text-primary)]">
-          You need to configure an LLM provider to use Autofix. Add your API key in Settings to continue.
-        </p>
-      </Modal>
+      {autofixPreflightModals}
     </main>
   )
 }

@@ -1,17 +1,3 @@
-export interface IntegrationsSettings {
-  enrichment_enabled: boolean
-  autofix_enabled: boolean
-  llm_configured: boolean
-  llm_provider: string | null
-  llm_api_key_masked: string | null
-  muted_repos: string[]
-}
-
-export async function fetchIntegrationsSettings(): Promise<IntegrationsSettings> {
-  const res = await fetch('/api/settings/integrations', { cache: 'no-store' })
-  return res.json()
-}
-
 export async function fetchDockerStatus(): Promise<{ running: boolean }> {
   const res = await fetch('/api/system/docker-status', { cache: 'no-store' })
   return res.json()

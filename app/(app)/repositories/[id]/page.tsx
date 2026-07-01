@@ -11,6 +11,9 @@ import { Button, Badge, Pagination, Dropdown, Tabs, Checkbox, Spinner, Tooltip, 
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { EmptyState } from '@/components/patterns/EmptyState'
 import { useToast } from '@/components/ui/ToastContext'
+import { useAutofixPreflight } from '@/hooks/useAutofixPreflight'
+import { useEnrichPreflight } from '@/hooks/useEnrichPreflight'
+import { useSettings } from '@/app/(app)/settings/SettingsContext'
 import { getRepoDetail, generateMockEnrichment, type Finding } from './mock-data'
 import {
   getAutofixSession, generateAttestation,
@@ -117,28 +120,8 @@ export default function RepoDetailPage() {
   const [topTab, setTopTab] = useState<'analysis' | 'autofix'>(searchParams.get('tab') === 'autofix' ? 'autofix' : 'analysis')
 
   // ─── Feature flags ───
-  const [llmConfigured, setLlmConfigured] = useState(false)
-  const [autofixEnabled, setAutofixEnabled] = useState(false)
-  const [enrichmentEnabled, setEnrichmentEnabled] = useState(false)
+  const { autofixEnabled } = useSettings()
   const [gateModal, setGateModal] = useState<FeatureGate | null>(null)
-
-  useEffect(() => {
-    const checkConfig = () => {
-      try {
-        const llm = localStorage.getItem('llm_config')
-        setLlmConfigured(!!(llm && JSON.parse(llm).api_key))
-        const features = localStorage.getItem('features_config')
-        const f = features ? JSON.parse(features) : {}
-        setAutofixEnabled(!!f.autofix)
-        setEnrichmentEnabled(!!f.enrichment)
-      } catch { /* ignore */ }
-    }
-    checkConfig()
-    window.addEventListener('focus', checkConfig)
-    return () => window.removeEventListener('focus', checkConfig)
-  }, [])
-
-  const isLLMConfigured = useCallback(() => llmConfigured, [llmConfigured])
 
   // ─── Session cache ───
   const { repos, getSession, updateSession, clearSession } = useRepos()
@@ -168,8 +151,7 @@ export default function RepoDetailPage() {
 
   const getEnrichState = (id: string): EnrichmentState => enrichmentStates[id] || 'none'
 
-  const enrichFinding = useCallback((findingId: string) => {
-    if (!llmConfigured || !enrichmentEnabled) { setGateModal('enrichment'); return }
+  const beginEnrichSimulation = useCallback((findingId: string) => {
     setEnrichmentStates(prev => ({ ...prev, [findingId]: 'enriching' }))
     setEnrichmentProgress(prev => ({ ...prev, [findingId]: 0 }))
     const willFail = Math.random() < 0.15
@@ -191,16 +173,17 @@ export default function RepoDetailPage() {
       }
     }, 1200)
     enrichTimers.current[findingId] = interval
-  }, [llmConfigured, enrichmentEnabled])
+  }, [])
+
+  const { run: runEnrichWithChecks, checking: checkingEnrich, modals: enrichPreflightModals } = useEnrichPreflight(beginEnrichSimulation)
 
   const enrichSelected = useCallback(() => {
-    if (!llmConfigured || !enrichmentEnabled) { setGateModal('enrichment'); return }
     selectedFindings.forEach(id => {
       const f = findingsState.find(fi => fi.id === id)
       const state = getEnrichState(id)
-      if (f && (state === 'none' || state === 'failed') && canEnrich(f)) enrichFinding(id)
+      if (f && (state === 'none' || state === 'failed') && canEnrich(f)) runEnrichWithChecks(id)
     })
-  }, [selectedFindings, enrichmentStates, findingsState, enrichFinding, llmConfigured, enrichmentEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFindings, enrichmentStates, findingsState, runEnrichWithChecks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ignoreSelected = useCallback(() => {
     setFindingsState(prev => prev.map(f =>
@@ -314,8 +297,7 @@ export default function RepoDetailPage() {
   }, [slug, updateSession])
 
 
-  const startAutofix = useCallback(() => {
-    if (!llmConfigured || !autofixEnabled) { setGateModal('autofix'); return }
+  const beginAutofixSimulation = useCallback(() => {
     setAfPageState('running'); setAfRunStep(0); setAfFindingProgress({})
     let step = 0
     afRunTimer.current = setInterval(() => {
@@ -347,7 +329,9 @@ export default function RepoDetailPage() {
         toast('Autofix complete')
       }
     }, 1500)
-  }, [llmConfigured, autofixEnabled, slug, toast])
+  }, [slug, toast])
+
+  const { run: runAutofixWithChecks, checking: checkingAutofix, modals: autofixPreflightModals } = useAutofixPreflight(beginAutofixSimulation)
 
   const acceptFix = useCallback((id: string) => {
     setAfFindings(prev => prev.map(f => f.finding_id === id ? { ...f, fix_status: 'applied' as FixStatus, applied_at: 'Just now', applied_by: 'Zane F.' } : f))
@@ -368,8 +352,8 @@ export default function RepoDetailPage() {
   }, [afSelectedFindings, toast])
   const handleExportPatch = useCallback(() => { toast('Patch file downloaded') }, [toast])
   const handleRerun = useCallback(() => {
-    setAfFindings([]); setAfSession(null); setAfSelectedFindings(new Set()); setAfExpandedFinding(null); setAfFilters([]); startAutofix()
-  }, [startAutofix])
+    setAfFindings([]); setAfSession(null); setAfSelectedFindings(new Set()); setAfExpandedFinding(null); setAfFilters([]); runAutofixWithChecks(slug)
+  }, [runAutofixWithChecks, slug])
 
   const handleDownloadPolicy = useCallback(() => {
     if (!attestation) return
@@ -670,12 +654,14 @@ export default function RepoDetailPage() {
                                   <div className="flex items-center gap-2 pt-3 border-t border-[var(--color-border-muted)]">
                                     {eState === 'none' && canEnrich(finding) && (
                                       <Tooltip content="Generate AI explanation, code fix, and diff" position="bottom">
-                                        <Button variant="primary" size="sm" icon={Sparkles} onClick={() => enrichFinding(finding.id)}>Enrich</Button>
+                                        <Button variant="primary" size="sm" icon={Sparkles} loading={checkingEnrich} onClick={() => runEnrichWithChecks(finding.id)}>
+                                          {checkingEnrich ? 'Checking...' : 'Enrich'}
+                                        </Button>
                                       </Tooltip>
                                     )}
                                     {eState === 'failed' && (
                                       <Tooltip content="Retry enrichment" position="bottom">
-                                        <Button variant="primary" size="sm" icon={RotateCcw} onClick={() => enrichFinding(finding.id)}>Retry</Button>
+                                        <Button variant="primary" size="sm" icon={RotateCcw} loading={checkingEnrich} onClick={() => runEnrichWithChecks(finding.id)}>Retry</Button>
                                       </Tooltip>
                                     )}
                                     <Tooltip content="Mark as fixed externally — re-scan will verify" position="bottom">
@@ -843,7 +829,9 @@ export default function RepoDetailPage() {
                   {/* CTA */}
                   <div className="flex flex-col items-center gap-2 -mt-2">
                     {repoEntry?.scanner.status && repoEntry.scanner.status !== 'not_scanned' && repoEntry.scanner.status !== 'scanning' ? (
-                      <Button icon={Wand2} onClick={startAutofix}>Run autofix</Button>
+                      <Button icon={Wand2} loading={checkingAutofix} onClick={() => runAutofixWithChecks(slug)}>
+                        {checkingAutofix ? 'Checking...' : 'Run autofix'}
+                      </Button>
                     ) : (
                       <>
                         <Button variant="secondary" icon={RefreshCw} onClick={() => setTopTab('analysis')}>Run scan first</Button>
@@ -905,7 +893,9 @@ export default function RepoDetailPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="secondary" icon={RefreshCw} onClick={handleRerun}>Re-scan</Button>
+                      <Button variant="secondary" icon={RotateCcw} loading={checkingAutofix} onClick={handleRerun}>
+                        {checkingAutofix ? 'Checking...' : 'Re-run'}
+                      </Button>
                       <Button variant="secondary" icon={Download} onClick={handleExportPatch}>Export</Button>
                         </div>
                   </div>
@@ -1190,6 +1180,8 @@ export default function RepoDetailPage() {
       )}
 
       {gateModal && <FeatureGateModal open={!!gateModal} feature={gateModal} onClose={() => setGateModal(null)} />}
+      {autofixPreflightModals}
+      {enrichPreflightModals}
     </main>
     </div>
   )

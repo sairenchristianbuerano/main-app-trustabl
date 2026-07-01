@@ -7,6 +7,7 @@ import { FormLayout } from '@/components/patterns/FormLayout'
 import { EmptyState } from '@/components/patterns/EmptyState'
 import { useToast } from '@/components/ui/ToastContext'
 import { useRepos } from '@/app/(app)/repositories/RepoContext'
+import { useSettings } from '@/app/(app)/settings/SettingsContext'
 
 type ToggleId = 'enrichment' | 'autofix'
 type ModalTrigger = ToggleId | 'manual'
@@ -45,12 +46,11 @@ export default function IntegrationsSettingsPage() {
     return () => { if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current) }
   }, [searchParams])
 
-  const [enrichmentEnabled, setEnrichmentEnabled] = useState(() => {
-    try { const c = localStorage.getItem('features_config'); return c ? !!JSON.parse(c).enrichment : false } catch { return false }
-  })
-  const [autofixEnabled, setAutofixEnabled] = useState(() => {
-    try { const c = localStorage.getItem('features_config'); return c ? !!JSON.parse(c).autofix : false } catch { return false }
-  })
+  const {
+    enrichmentEnabled, autofixEnabled, llmProvider: savedProvider, llmApiKey: savedApiKey,
+    setEnrichmentEnabled, setAutofixEnabled, setLlmConfig, clearLlmConfig,
+  } = useSettings()
+  const llmSaved = !!savedApiKey
 
   const [modalFor, setModalFor] = useState<ModalTrigger | null>(null)
   const [formProvider, setFormProvider] = useState('')
@@ -59,35 +59,9 @@ export default function IntegrationsSettingsPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle')
 
   const [hasInteracted, setHasInteracted] = useState(false)
-  const [llmSaved, setLlmSaved] = useState(() => {
-    try { const c = localStorage.getItem('llm_config'); return !!(c && JSON.parse(c).api_key) } catch { return false }
-  })
-  const [savedProvider, setSavedProvider] = useState(() => {
-    try { const c = localStorage.getItem('llm_config'); return c ? JSON.parse(c).provider || '' : '' } catch { return '' }
-  })
-  const [savedApiKey, setSavedApiKey] = useState(() => {
-    try { const c = localStorage.getItem('llm_config'); return c ? JSON.parse(c).api_key || '' : '' } catch { return '' }
-  })
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
 
   const mutedRepos = repos.filter(r => r.notifications_muted)
-
-  useEffect(() => {
-    localStorage.setItem('features_config', JSON.stringify({ enrichment: enrichmentEnabled, autofix: autofixEnabled }))
-    fetch('/api/settings/integrations', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enrichment_enabled: enrichmentEnabled, autofix_enabled: autofixEnabled }),
-    }).catch(() => { /* best-effort sync */ })
-  }, [enrichmentEnabled, autofixEnabled])
-
-  useEffect(() => {
-    fetch('/api/settings/integrations', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ llm_provider: llmSaved ? savedProvider : null, llm_api_key: llmSaved ? savedApiKey : null }),
-    }).catch(() => { /* best-effort sync */ })
-  }, [llmSaved, savedProvider, savedApiKey])
 
   const setEnabled = (which: ToggleId, value: boolean) => {
     if (which === 'enrichment') setEnrichmentEnabled(value)
@@ -141,10 +115,7 @@ export default function IntegrationsSettingsPage() {
     setSaveState('saving')
     setTimeout(() => {
       if (formApiKey.length >= 8) {
-        setSavedProvider(formProvider)
-        setSavedApiKey(formApiKey)
-        setLlmSaved(true)
-        localStorage.setItem('llm_config', JSON.stringify({ provider: formProvider, api_key: formApiKey }))
+        setLlmConfig(formProvider, formApiKey)
         if (modalFor && modalFor !== 'manual') setEnabled(modalFor, true)
         handleCloseModal()
         toast('LLM provider connected')
@@ -155,12 +126,7 @@ export default function IntegrationsSettingsPage() {
   }
 
   const handleRemoveLLM = () => {
-    setLlmSaved(false)
-    setSavedProvider('')
-    setSavedApiKey('')
-    setEnrichmentEnabled(false)
-    setAutofixEnabled(false)
-    localStorage.removeItem('llm_config')
+    clearLlmConfig()
     setRemoveConfirmOpen(false)
     toast('LLM provider removed. Enrichment and Autofix have been disabled.')
   }

@@ -2,7 +2,8 @@
 import { useCallback, useState } from 'react'
 import { FeatureGateModal } from '@/components/ui'
 import { LlmNotConfiguredModal } from '@/components/patterns/preflight/LlmNotConfiguredModal'
-import { fetchIntegrationsSettings, postEnrichFinding } from '@/lib/preflight'
+import { useSettings } from '@/app/(app)/settings/SettingsContext'
+import { postEnrichFinding } from '@/lib/preflight'
 
 type ModalState = 'feature-gate' | 'llm' | null
 
@@ -12,22 +13,22 @@ type ModalState = 'feature-gate' | 'llm' | null
  * No Docker check — enrichment only sends text to the LLM API.
  */
 export function useEnrichPreflight(onProceed: (findingId: string) => void) {
+  const { enrichmentEnabled, llmApiKey } = useSettings()
   const [modal, setModal] = useState<ModalState>(null)
   const [checking, setChecking] = useState(false)
 
   const run = useCallback(async (findingId: string) => {
     setChecking(true)
     try {
-      const settings = await fetchIntegrationsSettings()
-      if (!settings.enrichment_enabled) { setModal('feature-gate'); return }
-      if (!settings.llm_configured) { setModal('llm'); return }
+      if (!enrichmentEnabled) { setModal('feature-gate'); return }
+      if (!llmApiKey) { setModal('llm'); return }
 
       await postEnrichFinding(findingId)
       onProceed(findingId)
     } finally {
       setChecking(false)
     }
-  }, [onProceed])
+  }, [enrichmentEnabled, llmApiKey, onProceed])
 
   const modals = (
     <>

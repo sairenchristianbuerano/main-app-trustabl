@@ -3,7 +3,8 @@ import { useCallback, useState } from 'react'
 import { FeatureGateModal } from '@/components/ui'
 import { LlmNotConfiguredModal } from '@/components/patterns/preflight/LlmNotConfiguredModal'
 import { DockerNotRunningModal } from '@/components/patterns/preflight/DockerNotRunningModal'
-import { fetchIntegrationsSettings, fetchDockerStatus, postAutofixRun } from '@/lib/preflight'
+import { useSettings } from '@/app/(app)/settings/SettingsContext'
+import { fetchDockerStatus, postAutofixRun } from '@/lib/preflight'
 
 type ModalState = 'feature-gate' | 'llm' | 'docker' | null
 
@@ -13,6 +14,7 @@ type ModalState = 'feature-gate' | 'llm' | 'docker' | null
  * Call `run(repoIds)` from any "Run autofix" trigger; render `modals` alongside it.
  */
 export function useAutofixPreflight(onProceed: (repoIds: string | string[]) => void) {
+  const { autofixEnabled, llmApiKey } = useSettings()
   const [modal, setModal] = useState<ModalState>(null)
   const [checking, setChecking] = useState(false)
   const [pendingIds, setPendingIds] = useState<string | string[] | null>(null)
@@ -26,9 +28,8 @@ export function useAutofixPreflight(onProceed: (repoIds: string | string[]) => v
   const run = useCallback(async (repoIds: string | string[]) => {
     setChecking(true)
     try {
-      const settings = await fetchIntegrationsSettings()
-      if (!settings.autofix_enabled) { setModal('feature-gate'); return }
-      if (!settings.llm_configured) { setModal('llm'); return }
+      if (!autofixEnabled) { setModal('feature-gate'); return }
+      if (!llmApiKey) { setModal('llm'); return }
 
       const docker = await fetchDockerStatus()
       if (!docker.running) { setPendingIds(repoIds); setModal('docker'); return }
@@ -37,7 +38,7 @@ export function useAutofixPreflight(onProceed: (repoIds: string | string[]) => v
     } finally {
       setChecking(false)
     }
-  }, [startRun])
+  }, [autofixEnabled, llmApiKey, startRun])
 
   const handleDockerConfirm = useCallback(async () => {
     if (!pendingIds) return

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Gauge, FolderGit2, ChevronRight, RotateCcw } from 'lucide-react'
 import { RepoProvider } from '@/app/(app)/repositories/RepoContext'
+import { SettingsProvider } from '@/app/(app)/settings/SettingsContext'
 import { Sidebar } from '@/components/patterns/Sidebar'
 import { SettingsSidebar } from '@/components/patterns/SettingsSidebar'
 import { Modal, Button, Dropdown, NotificationBell } from '@/components/ui'
@@ -79,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const settingsTitle = 'Settings'
 
   return (
+    <SettingsProvider>
     <RepoProvider initialProvider={MOCK_PROVIDER}>
     <div className="flex h-screen w-screen bg-[var(--color-bg-page)] overflow-hidden">
       <div className="flex-shrink-0 overflow-hidden">
@@ -166,5 +168,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Modal>
     </div>
     </RepoProvider>
+    </SettingsProvider>
   )
 }

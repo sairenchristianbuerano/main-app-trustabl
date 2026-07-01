@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import {
   Button, Badge, Table, InputField, Dropdown,
-  Pagination, Modal, FeatureGateModal,
+  Pagination, Modal,
 } from '@/components/ui'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { EmptyState } from '@/components/patterns/EmptyState'
@@ -19,6 +19,7 @@ import { RepoSelectorModal, type RepoItem } from './RepoSelectorModal'
 import { useRepos, type ImportedRepo } from './RepoContext'
 import { getRepoDetail } from './[id]/mock-data'
 import { getAutofixRepos } from '../autofix/mock-data'
+import { useAutofixPreflight } from '@/hooks/useAutofixPreflight'
 
 type SortKey = 'name' | 'scanStatus' | 'autofixStatus' | 'lastActivity'
 type SortDir = 'asc' | 'desc'
@@ -78,30 +79,12 @@ export default function RepositoriesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT)
 
-  const [llmConfigured, setLlmConfigured] = useState(false)
-  const [autofixEnabled, setAutofixEnabled] = useState(false)
-  const [showGateModal, setShowGateModal] = useState(false)
-
   useEffect(() => {
     if (!openMenuId) return
     const handler = () => setOpenMenuId(null)
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
   }, [openMenuId])
-
-  useEffect(() => {
-    const checkConfig = () => {
-      try {
-        const llm = localStorage.getItem('llm_config')
-        setLlmConfigured(!!(llm && JSON.parse(llm).api_key))
-        const features = localStorage.getItem('features_config')
-        setAutofixEnabled(!!(features && JSON.parse(features).autofix))
-      } catch { /* ignore */ }
-    }
-    checkConfig()
-    window.addEventListener('focus', checkConfig)
-    return () => window.removeEventListener('focus', checkConfig)
-  }, [])
 
   const languages = useMemo(() => [...new Set(repos.map(r => r.language))].sort(), [repos])
   const frameworks = useMemo(() => [...new Set(repos.map(r => r.framework).filter(f => f !== 'Unknown'))].sort(), [repos])
@@ -341,11 +324,8 @@ export default function RepositoriesPage() {
     setSelectedIds([])
   }, [toast, startBatch])
 
-  const handleRunAutofix = useCallback((ids: string[]) => {
-    if (!llmConfigured || !autofixEnabled) {
-      setShowGateModal(true)
-      return
-    }
+  const startAutofixRun = useCallback((idsOrId: string | string[]) => {
+    const ids = Array.isArray(idsOrId) ? idsOrId : [idsOrId]
     if (ids.length >= 2) startBatch('autofix', ids)
     setRepos(prev => prev.map(r => {
       if (!ids.includes(r.id)) return r
@@ -357,7 +337,9 @@ export default function RepositoriesPage() {
     }))
     toast(`Autofix started for ${ids.length} repositor${ids.length > 1 ? 'ies' : 'y'}`)
     setSelectedIds([])
-  }, [llmConfigured, autofixEnabled, setShowGateModal, toast, startBatch])
+  }, [toast, startBatch])
+
+  const { run: runAutofixWithChecks, checking: checkingAutofix, modals: autofixPreflightModals } = useAutofixPreflight(startAutofixRun)
 
   const handleDelete = useCallback((ids: string[]) => {
     setRepos(prev => prev.filter(r => !ids.includes(r.id)))
@@ -473,7 +455,7 @@ export default function RepositoriesPage() {
           <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
             {s !== 'not_scanned' && a === 'not_run' && (
               <Tooltip content="Run autofix" position="top">
-                <Button variant="text" size="sm" icon={Play} iconOnly onClick={() => handleRunAutofix([row.id])} aria-label="Run autofix" />
+                <Button variant="text" size="sm" icon={Play} iconOnly loading={checkingAutofix} onClick={() => runAutofixWithChecks(row.id)} aria-label="Run autofix" />
               </Tooltip>
             )}
             {(a === 'ready' || a === 'all_applied' || a === 'rejected') && (
@@ -525,7 +507,7 @@ export default function RepositoriesPage() {
         )
       },
     },
-  ], [handleScan, handleRunAutofix, toggleMute, toast, router, openMenuId])
+  ], [handleScan, runAutofixWithChecks, checkingAutofix, toggleMute, toast, router, openMenuId])
 
   if (!hasRepos) {
     return (
@@ -581,7 +563,9 @@ export default function RepositoriesPage() {
             </span>
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" icon={RefreshCw} onClick={() => handleScan(selectedIds)}>Scan selected</Button>
-              <Button variant="secondary" size="sm" icon={Wand2} onClick={() => handleRunAutofix(selectedIds)}>Run autofix</Button>
+              <Button variant="secondary" size="sm" icon={Wand2} loading={checkingAutofix} onClick={() => runAutofixWithChecks(selectedIds)}>
+                {checkingAutofix ? 'Checking...' : 'Run autofix'}
+              </Button>
               <Button variant="danger" size="sm" icon={Trash2} onClick={() => handleDelete(selectedIds)}>Delete</Button>
             </div>
           </div>
@@ -643,7 +627,7 @@ export default function RepositoriesPage() {
         </p>
       </Modal>
 
-      <FeatureGateModal open={showGateModal} feature="autofix" onClose={() => setShowGateModal(false)} />
+      {autofixPreflightModals}
 
       <GitHubConnectModal open={connectOpen} onClose={() => setConnectOpen(false)} onSuccess={handleGitHubConnect} />
       <RepoSelectorModal open={selectorOpen} onClose={() => setSelectorOpen(false)} onImport={handleImport} repos={availableToImport} />
