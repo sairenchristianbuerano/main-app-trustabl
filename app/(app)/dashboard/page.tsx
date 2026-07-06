@@ -454,11 +454,7 @@ export default function DashboardPage() {
           )}
           {rightWidget === 'fixes' && (
             <div className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] flex flex-col overflow-hidden min-h-[180px]">
-              <WidgetHeader
-                title="Fixes to Review"
-                viewAllLabel={readyRepos.length > 0 ? 'View all' : undefined}
-                onViewAll={readyRepos.length > 0 ? () => router.push('/repositories?filter=af:ready') : undefined}
-              />
+              <WidgetHeader title="Fixes to Review" />
               {readyRepos.length === 0 ? (
                 <div className="flex flex-col items-center gap-1 px-5 py-10 text-center">
                   <p className="text-sm text-[var(--color-text-secondary)]">No fixes pending review</p>
