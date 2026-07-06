@@ -32,6 +32,14 @@ export interface ActivityItem {
   type: 'scan' | 'fix' | 'ignore' | 'add'
 }
 
+export interface ScanComparison {
+  previous_scan_at: string
+  new_findings: string[]
+  fixed_findings: Finding[]
+  changed_findings: { finding_id: string; previous_severity: Finding['severity']; current_severity: Finding['severity'] }[]
+  unchanged_findings: string[]
+}
+
 export interface RepoDetail {
   repo: {
     name: string
@@ -263,6 +271,68 @@ export function generateMockEnrichment(finding: Finding): Pick<Finding, 'ai_expl
     code_snippet: `// ${fileName}:${lineNum}\n// Current implementation\nfunction handle() {\n  // ${finding.title.toLowerCase()}\n  return process(input)\n}`,
     replacement: `// ${fileName}:${lineNum}\n// Fixed implementation\nfunction handle() {\n  const validated = validate(input)\n  try {\n    return process(validated)\n  } catch (err) {\n    logger.error('${finding.policyId}', { err })\n    return fallback(err)\n  }\n}`,
   }
+}
+
+const SEVERITY_ORDER: Finding['severity'][] = ['low', 'medium', 'high', 'critical']
+
+function bumpSeverity(s: Finding['severity']): Finding['severity'] {
+  const i = SEVERITY_ORDER.indexOf(s)
+  return Math.random() < 0.5 ? SEVERITY_ORDER[Math.max(0, i - 1)] : SEVERITY_ORDER[Math.min(SEVERITY_ORDER.length - 1, i + 1)]
+}
+
+// Simulates what a fresh scan would find: a few findings get fixed, a few
+// change severity, a couple new ones appear — the rest are unchanged. Since
+// this is a mock backend, we generate the "after" state and the diff against
+// the "before" state together instead of running two independent scans and
+// diffing them.
+export function generateRescanResult(current: Finding[], previousScanAt: string): { findings: Finding[]; comparison: ScanComparison } {
+  const open = current.filter(f => f.status === 'open')
+  const shuffled = [...open].sort(() => Math.random() - 0.5)
+
+  const fixedCount = open.length >= 3 ? Math.min(2, Math.floor(open.length * 0.15) + 1) : 0
+  const fixed = shuffled.slice(0, fixedCount)
+
+  const changedCount = open.length - fixedCount >= 3 ? Math.min(2, Math.floor(open.length * 0.15) + 1) : 0
+  const changedSource = shuffled.slice(fixedCount, fixedCount + changedCount)
+  const changed = changedSource.map(f => ({ finding: f, previous_severity: f.severity, current_severity: bumpSeverity(f.severity) }))
+
+  const unchangedSource = shuffled.slice(fixedCount + changedCount)
+
+  const existingPolicyIds = new Set(current.map(f => f.policyId))
+  const candidates = FINDING_TEMPLATES.filter(t => !existingPolicyIds.has(t.policyId))
+  const newCount = Math.min(candidates.length, 1 + Math.floor(Math.random() * 2))
+  const newFindings: Finding[] = candidates.slice(0, newCount).map((template, i) => ({
+    id: `new-${Date.now()}-${i}`,
+    policyId: template.policyId,
+    severity: template.severity,
+    title: template.title,
+    scope: template.scope,
+    location: `src/${template.scope}s/main.ts:${10 + i * 8}`,
+    status: 'open' as const,
+    description: template.description,
+    fix: template.fix,
+    confidence: 70 + i * 5,
+    tool_name: template.tool_name,
+    enriched: false,
+  }))
+
+  const notOpen = current.filter(f => f.status !== 'open')
+  const findings: Finding[] = [
+    ...notOpen,
+    ...unchangedSource,
+    ...changed.map(c => ({ ...c.finding, severity: c.current_severity })),
+    ...newFindings,
+  ]
+
+  const comparison: ScanComparison = {
+    previous_scan_at: previousScanAt,
+    new_findings: newFindings.map(f => f.id),
+    fixed_findings: fixed,
+    changed_findings: changed.map(c => ({ finding_id: c.finding.id, previous_severity: c.previous_severity, current_severity: c.current_severity })),
+    unchanged_findings: unchangedSource.map(f => f.id),
+  }
+
+  return { findings, comparison }
 }
 
 export function getRepoDetail(name: string): RepoDetail {

@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useAutofixPreflight } from '@/hooks/useAutofixPreflight'
 import { useEnrichPreflight } from '@/hooks/useEnrichPreflight'
 import { useSettings } from '@/app/(app)/settings/SettingsContext'
-import { getRepoDetail, generateMockEnrichment, type Finding } from './mock-data'
+import { getRepoDetail, generateMockEnrichment, generateRescanResult, type Finding, type ActivityItem, type ScanComparison } from './mock-data'
 import {
   getAutofixSession, generateAttestation,
   type AutofixFinding, type AutofixSession, type FixStatus, type AttestationData,
@@ -124,13 +124,17 @@ export default function RepoDetailPage() {
   const [gateModal, setGateModal] = useState<FeatureGate | null>(null)
 
   // ─── Session cache ───
-  const { repos, getSession, updateSession, clearSession } = useRepos()
+  const { repos, setRepos, getSession, updateSession, clearSession } = useRepos()
   const cached = getSession(slug)
   const repoEntry = repos.find(r => r.name === slug)
 
   // ─── Static Analysis state ───
-  const [activeFilters, setActiveFilters] = useState<string[]>(cached?.activeFilters ?? [])
-  const [expandedFinding, setExpandedFinding] = useState<string | null>(null)
+  const [activeFilters, setActiveFilters] = useState<string[]>(() => {
+    const filter = searchParams.get('filter')
+    if (filter) return filter.split(',')
+    return cached?.activeFilters ?? []
+  })
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(searchParams.get('finding'))
   const [findingsState, setFindingsState] = useState<Finding[]>(cached?.findingsState ?? data.findings)
   const [findingsPage, setFindingsPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -140,6 +144,81 @@ export default function RepoDetailPage() {
   const [enrichmentStates, setEnrichmentStates] = useState<Record<string, EnrichmentState>>(cached?.enrichmentStates ?? {})
   const [enrichmentProgress, setEnrichmentProgress] = useState<Record<string, number>>(cached?.enrichmentProgress ?? {})
   const enrichTimers = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+
+  // ─── Rescan state ───
+  const [activityState, setActivityState] = useState<ActivityItem[]>(cached?.activityState ?? data.activity)
+  const [lastScanAt, setLastScanAt] = useState(cached?.lastScanAt ?? (data.activity.find(a => a.type === 'scan')?.timestamp ?? 'never'))
+  const [scanning, setScanning] = useState(false)
+  const [scanProgress, setScanProgress] = useState(0)
+  const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [comparison, setComparison] = useState<ScanComparison | null>(cached?.comparison ?? null)
+  const [resolvedSectionOpen, setResolvedSectionOpen] = useState(false)
+  const scanTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => () => { if (scanTimer.current) clearInterval(scanTimer.current) }, [])
+
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const handleRescan = useCallback(() => {
+    if (scanning) return
+    setScanning(true)
+    setScanProgress(0)
+    setCancelConfirm(false)
+    setActivityState(prev => [{ action: 'Scan started', timestamp: 'Just now', user: 'Zane F.', type: 'scan' as const }, ...prev])
+
+    scanTimer.current = setInterval(() => {
+      let done = false
+      setScanProgress(prev => {
+        const next = prev + 10 + Math.random() * 15
+        if (next < 100) return next
+        done = true
+        return 100
+      })
+      if (!done) return
+
+      clearInterval(scanTimer.current!)
+      scanTimer.current = null
+
+      const { findings: nextFindings, comparison: nextComparison } = generateRescanResult(findingsState, lastScanAt)
+      setFindingsState(nextFindings)
+      setComparison(nextComparison)
+      setScanning(false)
+      setLastScanAt('Just now')
+      setResolvedSectionOpen(false)
+
+      const openFindings = nextFindings.filter(f => f.status === 'open')
+      const hasCritOrHigh = openFindings.some(f => f.severity === 'critical' || f.severity === 'high')
+      const status = hasCritOrHigh ? 'fail' : 'pass'
+      setActivityState(prevActivity => [{ action: `Scan completed — ${openFindings.length} findings detected`, timestamp: 'Just now', user: 'Zane F.', type: 'scan' as const }, ...prevActivity])
+      toast(`Scan complete — ${slug} (${status}, ${openFindings.length} findings)`)
+
+      if (repoEntry) {
+        setRepos(prev => prev.map(r => r.id === repoEntry.id ? {
+          ...r,
+          scanner: { status, readiness: r.scanner.readiness, findings_count: openFindings.length, last_scan_at: 'Just now', last_scan_by: 'Zane F.' },
+          last_activity: { type: 'scan' as const, timestamp: 'Just now', by: 'Zane F.' },
+        } : r))
+      }
+    }, 400)
+  }, [scanning, findingsState, lastScanAt, slug, toast, repoEntry, setRepos])
+
+  const handleCancelScan = useCallback(() => {
+    if (scanTimer.current) { clearInterval(scanTimer.current); scanTimer.current = null }
+    setScanning(false)
+    setScanProgress(0)
+    setCancelConfirm(false)
+    toast('Scan cancelled')
+  }, [toast])
+
+  const clearComparison = useCallback(() => setComparison(null), [])
+
+  const findingBadge = useMemo(() => {
+    const map: Record<string, 'new' | 'changed'> = {}
+    if (comparison) {
+      comparison.new_findings.forEach(id => { map[id] = 'new' })
+      comparison.changed_findings.forEach(c => { map[c.finding_id] = 'changed' })
+    }
+    return map
+  }, [comparison])
 
   useEffect(() => {
     if (cached?.enrichmentStates) return
@@ -219,24 +298,35 @@ export default function RepoDetailPage() {
     const showIgnored = activeFilters.includes('ignored')
     const showEnrichable = activeFilters.includes('enrichable')
     const showEnriched = activeFilters.includes('enriched')
+    const showNew = activeFilters.includes('cmp:new')
+    const showChanged = activeFilters.includes('cmp:changed')
+    const showUnchanged = activeFilters.includes('cmp:unchanged')
+    const anyComparisonFilter = showNew || showChanged || showUnchanged
     const list = base.filter(f => {
       if (activeScopes.length && !activeScopes.includes(f.scope)) return false
       if (activeSeverities.length && !activeSeverities.includes(f.severity)) return false
       if (showResolved || showIgnored) {
         if (showResolved && f.status === 'resolved') return true
         if (showIgnored && f.status === 'ignored') return true
-        if (!activeScopes.length && !activeSeverities.length && !showEnrichable && !showEnriched) return false
+        if (!activeScopes.length && !activeSeverities.length && !showEnrichable && !showEnriched && !anyComparisonFilter) return false
       }
       if (showEnrichable || showEnriched) {
         const eState = getEnrichState(f.id)
         if (showEnrichable && canEnrich(f) && eState !== 'enriching') return true
         if (showEnriched && eState === 'enriched') return true
-        if (!activeScopes.length && !activeSeverities.length && !showResolved && !showIgnored) return false
+        if (!activeScopes.length && !activeSeverities.length && !showResolved && !showIgnored && !anyComparisonFilter) return false
+      }
+      if (anyComparisonFilter) {
+        const badge = findingBadge[f.id]
+        if (showNew && badge === 'new') return true
+        if (showChanged && badge === 'changed') return true
+        if (showUnchanged && !badge && comparison?.unchanged_findings.includes(f.id)) return true
+        if (!activeScopes.length && !activeSeverities.length && !showResolved && !showIgnored && !showEnrichable && !showEnriched) return false
       }
       return true
     })
     return list.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity])
-  }, [findingsState, activeFilters, enrichmentStates, findingsSearch]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [findingsState, activeFilters, enrichmentStates, findingsSearch, findingBadge, comparison]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const findingsTotalPages = Math.max(1, Math.ceil(filteredFindings.length / pageSize))
   const paginatedFindings = filteredFindings.slice((findingsPage - 1) * pageSize, findingsPage * pageSize)
@@ -267,6 +357,7 @@ export default function RepoDetailPage() {
         return { afPageState: 'results' as AutofixPageState, afSession: session, afFindings: findings, attestation: generateAttestation(slug, session.id) }
       }
     }
+    if (afStatus === 'running') return { afPageState: 'running' as AutofixPageState, afSession: null, afFindings: [], attestation: null }
     return null
   })
   const [afPageState, setAfPageState] = useState<AutofixPageState>(afInit?.afPageState ?? cached?.afPageState ?? 'empty')
@@ -288,9 +379,9 @@ export default function RepoDetailPage() {
   useEffect(() => { return () => { if (afRunTimer.current) clearInterval(afRunTimer.current) } }, [])
 
   // ─── Sync session on unmount ───
-  const stateRef = useRef({ findingsState, enrichmentStates, enrichmentProgress, activeFilters, findingsSearch, activeSubTab, afPageState, afSession, afFindings, afFilters, afSubTab, afFindingsSearch, attestation })
+  const stateRef = useRef({ findingsState, enrichmentStates, enrichmentProgress, activeFilters, findingsSearch, activeSubTab, activityState, lastScanAt, comparison, afPageState, afSession, afFindings, afFilters, afSubTab, afFindingsSearch, attestation })
   useEffect(() => {
-    stateRef.current = { findingsState, enrichmentStates, enrichmentProgress, activeFilters, findingsSearch, activeSubTab, afPageState, afSession, afFindings, afFilters, afSubTab, afFindingsSearch, attestation }
+    stateRef.current = { findingsState, enrichmentStates, enrichmentProgress, activeFilters, findingsSearch, activeSubTab, activityState, lastScanAt, comparison, afPageState, afSession, afFindings, afFilters, afSubTab, afFindingsSearch, attestation }
   })
   useEffect(() => {
     return () => { updateSession(slug, stateRef.current) }
@@ -299,15 +390,24 @@ export default function RepoDetailPage() {
 
   const beginAutofixSimulation = useCallback(() => {
     setAfPageState('running'); setAfRunStep(0); setAfFindingProgress({})
+    if (repoEntry) {
+      setRepos(prev => prev.map(r => r.id === repoEntry.id ? {
+        ...r,
+        autofix: { ...r.autofix, status: 'running' as const, last_run_at: 'In progress', last_run_by: 'Zane F.' },
+        last_activity: { type: 'autofix' as const, timestamp: 'In progress', by: 'Zane F.' },
+      } : r))
+    }
     let step = 0
     afRunTimer.current = setInterval(() => {
       step++
       if (step < AUTOFIX_STEPS.length) { setAfRunStep(step) }
       else {
         if (afRunTimer.current) clearInterval(afRunTimer.current)
+        let fixesReady = 6
         const existingSession = getAutofixSession(slug)
         if (existingSession) {
           const newFindings = existingSession.findings
+          fixesReady = newFindings.length
           setAfSession({ ...existingSession, status: 'completed', created_at: 'Just now', created_by: 'Zane F.' })
           setAfFindings(newFindings)
         } else {
@@ -327,11 +427,26 @@ export default function RepoDetailPage() {
         setAfPageState('results')
         setAttestation(generateAttestation(slug, `ses_${slug.slice(0, 6)}_new`))
         toast('Autofix complete')
+        if (repoEntry) {
+          setRepos(prev => prev.map(r => r.id === repoEntry.id ? {
+            ...r,
+            autofix: { status: 'ready' as const, fix_readiness: 0, fixes_ready: fixesReady, fixes_applied: 0, fixes_total: fixesReady, last_run_at: 'Just now', last_run_by: 'Zane F.' },
+            last_activity: { type: 'autofix' as const, timestamp: 'Just now', by: 'Zane F.' },
+          } : r))
+        }
       }
     }, 1500)
-  }, [slug, toast])
+  }, [slug, toast, repoEntry, setRepos])
 
   const { run: runAutofixWithChecks, checking: checkingAutofix, modals: autofixPreflightModals } = useAutofixPreflight(beginAutofixSimulation)
+
+  // Resume the running-state animation if the table already shows autofix in progress for this repo.
+  useEffect(() => {
+    if (repoEntry?.autofix.status === 'running' && afPageState === 'running' && !afRunTimer.current) {
+      beginAutofixSimulation()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const acceptFix = useCallback((id: string) => {
     setAfFindings(prev => prev.map(f => f.finding_id === id ? { ...f, fix_status: 'applied' as FixStatus, applied_at: 'Just now', applied_by: 'Zane F.' } : f))
@@ -459,15 +574,58 @@ export default function RepoDetailPage() {
                       </Badge>
                     </div>
                     <p className="text-xs text-[var(--color-text-tertiary)]">
-                      {data.repo.framework} · {data.repo.language} · Last scan {data.activity.find(a => a.type === 'scan')?.timestamp ?? 'never'}
+                      {data.repo.framework} · {data.repo.language} · Last scan {lastScanAt}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary" icon={RefreshCw}>Re-scan</Button>
+                  <Button variant="secondary" icon={scanning ? undefined : RefreshCw} loading={scanning} disabled={scanning} onClick={handleRescan}>{scanning ? 'Scanning...' : 'Re-scan'}</Button>
                   <Button variant="secondary" icon={Download}>Export</Button>
                 </div>
               </div>
+
+              {/* Scanning overlay */}
+              {scanning && (
+                <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-4">
+                  <div className="h-1 w-full rounded-full bg-[var(--color-bg-raised)] overflow-hidden">
+                    <div className="h-full rounded-full bg-[var(--color-accent-default)] transition-[width] duration-300" style={{ width: `${Math.min(scanProgress, 100)}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Loader2 size={14} className="text-[var(--color-accent-default)] animate-spin flex-shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-[var(--color-text-primary)]">Scanning in progress...</span>
+                        <span className="text-xs text-[var(--color-text-tertiary)]">Results will update when complete. You&apos;ll be notified when done.</span>
+                      </div>
+                    </div>
+                    {cancelConfirm ? (
+                      <div className="flex items-center gap-2 text-xs flex-shrink-0">
+                        <span className="text-[var(--color-text-tertiary)]">Cancel scan?</span>
+                        <button className="font-medium text-[var(--color-danger-text)] hover:underline" onClick={handleCancelScan}>Yes, cancel</button>
+                        <button className="font-medium text-[var(--color-text-secondary)] hover:underline" onClick={() => setCancelConfirm(false)}>Keep scanning</button>
+                      </div>
+                    ) : (
+                      <button className="text-xs font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] flex-shrink-0" onClick={() => setCancelConfirm(true)}>Cancel scan</button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Comparison summary bar */}
+              {comparison && !scanning && (
+                <div className="flex items-center justify-between px-4 py-2.5 rounded-[var(--radius-base)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)]">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-[var(--color-text-secondary)]">Compared to previous scan ({comparison.previous_scan_at})</span>
+                    <div className="flex items-center gap-1.5">
+                      {comparison.new_findings.length > 0 && <Badge variant="info" size="sm">+{comparison.new_findings.length} new</Badge>}
+                      {comparison.fixed_findings.length > 0 && <Badge variant="success" size="sm">−{comparison.fixed_findings.length} fixed</Badge>}
+                      {comparison.changed_findings.length > 0 && <Badge variant="warning" size="sm">~{comparison.changed_findings.length} changed</Badge>}
+                      <Badge variant="neutral" size="sm">{comparison.unchanged_findings.length} unchanged</Badge>
+                    </div>
+                  </div>
+                  <button className="text-xs font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]" onClick={clearComparison}>Clear comparison</button>
+                </div>
+              )}
 
               {/* Sub tabs */}
               <div className="flex items-center justify-between">
@@ -475,7 +633,7 @@ export default function RepoDetailPage() {
                   tabs={[
                     { label: 'Findings', value: 'findings', badge: findingsState.length },
                     { label: 'Surfaces', value: 'surfaces', badge: data.surfaces.length },
-                    { label: 'Activity', value: 'activity', badge: data.activity.length },
+                    { label: 'Activity', value: 'activity', badge: activityState.length },
                   ]}
                   value={activeSubTab}
                   onChange={(v) => setActiveSubTab(v as typeof activeSubTab)}
@@ -496,6 +654,11 @@ export default function RepoDetailPage() {
                       { label: 'Critical', value: 'critical', group: 'Severity' }, { label: 'High', value: 'high', group: 'Severity' }, { label: 'Medium', value: 'medium', group: 'Severity' }, { label: 'Low', value: 'low', group: 'Severity' },
                       { label: 'Enrichable', value: 'enrichable', group: 'Enrichment' }, { label: 'Enriched', value: 'enriched', group: 'Enrichment' },
                       { label: 'Resolved', value: 'resolved', group: 'Status' }, { label: 'Ignored', value: 'ignored', group: 'Status' },
+                      ...(comparison ? [
+                        { label: 'New', value: 'cmp:new', group: 'Comparison' },
+                        { label: 'Changed', value: 'cmp:changed', group: 'Comparison' },
+                        { label: 'Unchanged', value: 'cmp:unchanged', group: 'Comparison' },
+                      ] : []),
                     ]}
                     value={activeFilters}
                     onChange={(v) => { setActiveFilters(v as string[]); setFindingsPage(1) }}
@@ -540,7 +703,11 @@ export default function RepoDetailPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="flex flex-col rounded-[var(--radius-base)] border border-[var(--color-border-muted)]">
+                    <>
+                    {scanning && (
+                      <p className="text-xs text-[var(--color-text-tertiary)]">Showing results from previous scan — {lastScanAt}</p>
+                    )}
+                    <div className={['flex flex-col rounded-[var(--radius-base)] border border-[var(--color-border-muted)] transition-opacity', scanning ? 'opacity-60 pointer-events-none' : ''].filter(Boolean).join(' ')}>
                       <div className="flex items-center gap-3 px-4 py-2 bg-[var(--color-bg-raised)] border-b border-[var(--color-border-muted)] rounded-t-[var(--radius-base)]">
                         <Checkbox checked={allPageSelected} indeterminate={somePageSelected && !allPageSelected} onChange={toggleSelectAll} />
                         <span className="text-[11px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide">{allPageSelected ? 'Deselect all' : 'Select all'}</span>
@@ -550,6 +717,8 @@ export default function RepoDetailPage() {
                         const isDimmed = finding.status === 'resolved' || finding.status === 'ignored'
                         const eState = getEnrichState(finding.id)
                         const isSelected = selectedFindings.has(finding.id)
+                        const badge = findingBadge[finding.id]
+                        const changedInfo = comparison?.changed_findings.find(c => c.finding_id === finding.id)
                         return (
                           <div key={finding.id} className={['border-b border-[var(--color-border-muted)] last:border-b-0 last:rounded-b-[var(--radius-base)]', isDimmed ? 'opacity-50' : ''].filter(Boolean).join(' ')}>
                             <div className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-[var(--color-bg-surface)] transition-colors">
@@ -561,6 +730,8 @@ export default function RepoDetailPage() {
                                   <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">{finding.title}</span>
                                   <Badge variant="neutral" size="sm">{finding.scope}</Badge>
                                 </div>
+                                {badge === 'new' && <Badge variant="info" size="sm">New</Badge>}
+                                {badge === 'changed' && <Badge variant="warning" size="sm">Changed</Badge>}
                                 {eState === 'enriching' ? (
                                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[var(--radius-pill)] bg-[var(--color-accent-subtle)] text-[11px] font-medium text-[var(--color-accent-default)]">
                                     <Spinner size="sm" className="w-[10px] h-[10px]" />Enriching...
@@ -592,6 +763,14 @@ export default function RepoDetailPage() {
                                     <p className="text-sm text-[var(--color-text-primary)] leading-relaxed">{finding.fix}</p>
                                   </div>
                                 </div>
+                                {changedInfo && (
+                                  <div className="rounded-[var(--radius-base)] bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] px-3 py-2.5 flex items-center gap-2.5">
+                                    <AlertTriangle size={14} className="text-[var(--color-warning-text)] flex-shrink-0" />
+                                    <span className="text-sm text-[var(--color-warning-text)]">
+                                      Was {severityStyles[changedInfo.previous_severity].label} → now {severityStyles[changedInfo.current_severity].label}
+                                    </span>
+                                  </div>
+                                )}
                                 {eState === 'none' && !canEnrich(finding) && (
                                   <div className="rounded-[var(--radius-base)] bg-[var(--color-bg-raised)] border border-[var(--color-border-muted)] px-3 py-2.5 flex items-center gap-2.5">
                                     <Info size={14} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
@@ -678,6 +857,26 @@ export default function RepoDetailPage() {
                         )
                       })}
                     </div>
+                    </>
+                  )}
+                  {comparison && comparison.fixed_findings.length > 0 && (
+                    <div className="rounded-[var(--radius-base)] border border-[var(--color-border-muted)] overflow-hidden">
+                      <button
+                        onClick={() => setResolvedSectionOpen(o => !o)}
+                        className="flex items-center justify-between w-full px-4 py-2.5 bg-[var(--color-bg-raised)] text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-surface)] transition-colors"
+                      >
+                        <span>{comparison.fixed_findings.length} finding{comparison.fixed_findings.length > 1 ? 's' : ''} resolved since last scan</span>
+                        <ChevronDown size={14} className={['text-[var(--color-text-tertiary)] transition-transform', resolvedSectionOpen ? 'rotate-180' : ''].join(' ')} />
+                      </button>
+                      {resolvedSectionOpen && comparison.fixed_findings.map(f => (
+                        <div key={f.id} className="flex items-center gap-3 px-4 py-3 border-t border-[var(--color-border-muted)] opacity-50">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide flex-shrink-0" style={{ color: severityStyles[f.severity].color }}>{severityStyles[f.severity].label}</span>
+                          <div className="w-px h-4 bg-[var(--color-border-muted)] flex-shrink-0" />
+                          <span className="text-sm text-[var(--color-text-primary)] line-through flex-1 truncate">{f.title}</span>
+                          <Badge variant="success" size="sm">Fixed</Badge>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   {filteredFindings.length > pageSize && (
                     <Pagination currentPage={findingsPage} totalPages={findingsTotalPages} totalItems={filteredFindings.length} pageSize={pageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} onPageChange={setFindingsPage} onPageSizeChange={(size) => { setPageSize(size); setFindingsPage(1) }} />
@@ -712,16 +911,16 @@ export default function RepoDetailPage() {
               {/* Activity tab */}
               {activeSubTab === 'activity' && (
                 <div className="flex flex-col rounded-[var(--radius-base)] border border-[var(--color-border-muted)] overflow-hidden px-5 py-4">
-                  {data.activity.map((item, i) => {
+                  {activityState.map((item, i) => {
                     const iconMap = { scan: Shield, fix: CheckCircle, ignore: EyeOff, add: Circle }
                     const Icon = iconMap[item.type]
                     return (
                       <div key={i} className="flex gap-3">
                         <div className="flex flex-col items-center">
                           <div className="w-6 h-6 rounded-full bg-[var(--color-bg-raised)] border border-[var(--color-border-muted)] flex items-center justify-center flex-shrink-0"><Icon size={12} className="text-[var(--color-text-tertiary)]" /></div>
-                          {i < data.activity.length - 1 && <div className="w-px flex-1 bg-[var(--color-border-muted)] my-1" />}
+                          {i < activityState.length - 1 && <div className="w-px flex-1 bg-[var(--color-border-muted)] my-1" />}
                         </div>
-                        <div className={i < data.activity.length - 1 ? 'pb-4' : ''}>
+                        <div className={i < activityState.length - 1 ? 'pb-4' : ''}>
                           <p className="text-sm text-[var(--color-text-primary)]">{item.action}</p>
                           <p className="text-[11px] text-[var(--color-text-tertiary)]">{item.timestamp} · {item.user}</p>
                         </div>
@@ -738,8 +937,8 @@ export default function RepoDetailPage() {
                 <p className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Scan Info</p>
                 <div className="flex flex-col gap-2 text-xs text-[var(--color-text-secondary)]">
                   <div className="flex justify-between"><span>Scan ID</span><code className="text-[var(--color-text-primary)] font-mono text-[11px]">{data.scan.id}</code></div>
-                  <div className="flex justify-between"><span>Run time</span><span className="text-[var(--color-text-primary)]">{data.activity.find(a => a.type === 'scan')?.timestamp ?? 'never'}</span></div>
-                  <div className="flex justify-between"><span>Run by</span><span className="text-[var(--color-text-primary)]">{data.activity.find(a => a.type === 'scan')?.user ?? '—'}</span></div>
+                  <div className="flex justify-between"><span>Run time</span><span className="text-[var(--color-text-primary)]">{lastScanAt}</span></div>
+                  <div className="flex justify-between"><span>Run by</span><span className="text-[var(--color-text-primary)]">{activityState.find(a => a.type === 'scan')?.user ?? '—'}</span></div>
                 </div>
               </div>
               {findingsState.length > 0 && (

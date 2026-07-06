@@ -46,6 +46,56 @@ export function FormSkeleton() {
   )
 }
 
+export function DashboardGridSkeleton() {
+  return (
+    <div className="w-full max-w-[1120px] mx-auto flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2">
+          <Pulse className="h-5 w-56" />
+          <Pulse className="h-3.5 w-72" />
+        </div>
+        <Pulse className="h-[42px] w-36 rounded-[var(--radius-base)]" />
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-4 flex flex-col gap-3">
+            <Pulse className="h-8 w-8 rounded-[var(--radius-base)]" />
+            <Pulse className="h-6 w-16" />
+            <Pulse className="h-3 w-24" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-[1.4fr_1fr] gap-4">
+        <div className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-4 flex flex-col gap-3">
+          <Pulse className="h-4 w-32" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Pulse key={i} className="h-10 w-full" />
+          ))}
+        </div>
+        <div className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-4 flex flex-col gap-3">
+          <Pulse className="h-4 w-28" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Pulse key={i} className="h-9 w-full" />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-[var(--radius-card)] border border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] p-4 flex flex-col gap-3">
+            <Pulse className="h-4 w-24" />
+            {Array.from({ length: 4 }).map((_, j) => (
+              <Pulse key={j} className="h-6 w-full" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function EmptyStateSkeleton() {
   return (
     <div className="flex-1 flex items-center justify-center">

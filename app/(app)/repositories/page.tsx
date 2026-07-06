@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ScanSearch, RefreshCw, Search, Loader2, Play,
   Trash2, Filter, ArrowRight, Wand2, Bell, BellOff, MoreVertical,
@@ -20,21 +20,12 @@ import { useRepos, type ImportedRepo } from './RepoContext'
 import { getRepoDetail } from './[id]/mock-data'
 import { getAutofixRepos } from '../autofix/mock-data'
 import { useAutofixPreflight } from '@/hooks/useAutofixPreflight'
+import { AVAILABLE_REPOS } from './available-repos'
 
 type SortKey = 'name' | 'scanStatus' | 'autofixStatus' | 'lastActivity'
 type SortDir = 'asc' | 'desc'
 
 const PAGE_SIZE_DEFAULT = 5
-
-const AVAILABLE_REPOS: RepoItem[] = [
-  { id: '1', name: 'ai-chatbot', language: 'TypeScript', updatedAgo: '2 hours' },
-  { id: '2', name: 'agent-pipeline', language: 'Python', updatedAgo: '1 day' },
-  { id: '3', name: 'llm-gateway', language: 'Go', updatedAgo: '3 days' },
-  { id: '4', name: 'prompt-engine', language: 'TypeScript', updatedAgo: '5 days' },
-  { id: '5', name: 'eval-harness', language: 'Python', updatedAgo: '1 week' },
-  { id: '6', name: 'rag-service', language: 'Python', updatedAgo: '2 weeks' },
-  { id: '7', name: 'tool-executor', language: 'Rust', updatedAgo: '3 weeks' },
-]
 
 function readinessColor(value: number): string {
   if (value >= 80) return 'var(--color-success-text)'
@@ -62,8 +53,9 @@ function autofixGateStatus(r: ImportedRepo): { label: string; variant: 'success'
 
 export default function RepositoriesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
-  const { addNotification, startBatch, reportScanResult, reportAutofixResult } = useNotifications()
+  const { addNotification, startBatch, reportAutofixResult } = useNotifications()
   const { repos, setRepos, githubConnected, setGithubConnected, toggleMute } = useRepos()
 
   const [connectOpen, setConnectOpen] = useState(false)
@@ -72,7 +64,10 @@ export default function RepositoriesPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeFilters, setActiveFilters] = useState<string[]>([])
+  const [activeFilters, setActiveFilters] = useState<string[]>(() => {
+    const filter = searchParams.get('filter')
+    return filter ? filter.split(',') : []
+  })
   const [sortKey, setSortKey] = useState<SortKey>('scanStatus')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -143,55 +138,6 @@ export default function RepositoriesPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-
-  // --- Scan completion simulation ---
-  const scanTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-
-  useEffect(() => {
-    const scanning = repos.filter(r => r.scanner.status === 'scanning')
-    for (const repo of scanning) {
-      if (scanTimers.current.has(repo.id)) continue
-      const delay = 3000 + Math.random() * 4000
-      const timer = setTimeout(() => {
-        setRepos(prev => prev.map(r => {
-          if (r.id !== repo.id) return r
-          const detail = getRepoDetail(r.name)
-          const scanStatus = detail.repo.gate_status === 'pass' ? 'pass' : detail.repo.readiness_score >= 50 ? 'warning' : 'fail'
-          return {
-            ...r,
-            framework: detail.repo.framework,
-            scanner: {
-              status: scanStatus as 'pass' | 'fail' | 'warning',
-              readiness: detail.repo.readiness_score,
-              findings_count: detail.repo.findings_count,
-              last_scan_at: 'Just now',
-              last_scan_by: 'Zane F.',
-            },
-            last_activity: { type: 'scan' as const, timestamp: 'Just now', by: 'Zane F.' },
-          }
-        }))
-        const detail = getRepoDetail(repo.name)
-        const scanStatus = detail.repo.gate_status === 'pass' ? 'pass' : detail.repo.readiness_score >= 50 ? 'warning' : 'fail'
-        const inBatch = reportScanResult(repo.id, scanStatus)
-        if (!inBatch) {
-          addNotification({
-            type: 'scan_completed',
-            content: `Scan completed — ${repo.name} · ${scanStatus}, ${detail.repo.findings_count} findings`,
-            status: scanStatus,
-            link: { page: 'repositories', params: { repo: repo.name } },
-            batch_id: null,
-            batch_summary: null,
-          })
-        }
-        scanTimers.current.delete(repo.id)
-      }, delay)
-      scanTimers.current.set(repo.id, timer)
-    }
-    return () => {
-      scanTimers.current.forEach(t => clearTimeout(t))
-      scanTimers.current.clear()
-    }
-  }, [repos, addNotification, reportScanResult])
 
   // --- Autofix completion simulation ---
   const autofixTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())

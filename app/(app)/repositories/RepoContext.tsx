@@ -1,7 +1,9 @@
 'use client'
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
-import type { Finding } from './[id]/mock-data'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import type { Finding, ActivityItem, ScanComparison } from './[id]/mock-data'
+import { getRepoDetail } from './[id]/mock-data'
 import type { AutofixFinding, AutofixSession, AttestationData } from '../autofix/mock-data'
+import { useNotifications } from '@/components/ui/NotificationContext'
 
 type ScanStatus = 'not_scanned' | 'scanning' | 'pass' | 'fail' | 'warning'
 type AutofixStatus = 'not_run' | 'running' | 'ready' | 'all_applied' | 'rejected'
@@ -44,6 +46,9 @@ interface RepoSessionState {
   activeFilters: string[]
   findingsSearch: string
   activeSubTab: 'findings' | 'surfaces' | 'activity'
+  activityState: ActivityItem[]
+  lastScanAt: string
+  comparison: ScanComparison | null
 
   // Autofix
   afPageState: 'empty' | 'running' | 'results'
@@ -74,6 +79,56 @@ export function RepoProvider({ children, initialProvider }: { children: ReactNod
   const [repos, setRepos] = useState<ImportedRepo[]>([])
   const [githubConnected, setGithubConnected] = useState(true)
   const sessionsRef = useRef<Map<string, Partial<RepoSessionState>>>(new Map())
+  const { addNotification, reportScanResult } = useNotifications()
+
+  // --- Scan completion simulation (runs app-wide, not just on the repositories page) ---
+  const scanTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  useEffect(() => {
+    const scanning = repos.filter(r => r.scanner.status === 'scanning')
+    for (const repo of scanning) {
+      if (scanTimers.current.has(repo.id)) continue
+      const delay = 3000 + Math.random() * 4000
+      const timer = setTimeout(() => {
+        setRepos(prev => prev.map(r => {
+          if (r.id !== repo.id) return r
+          const detail = getRepoDetail(r.name)
+          const scanStatus = detail.repo.gate_status === 'pass' ? 'pass' : detail.repo.readiness_score >= 50 ? 'warning' : 'fail'
+          return {
+            ...r,
+            framework: detail.repo.framework,
+            scanner: {
+              status: scanStatus as 'pass' | 'fail' | 'warning',
+              readiness: detail.repo.readiness_score,
+              findings_count: detail.repo.findings_count,
+              last_scan_at: 'Just now',
+              last_scan_by: 'Zane F.',
+            },
+            last_activity: { type: 'scan' as const, timestamp: 'Just now', by: 'Zane F.' },
+          }
+        }))
+        const detail = getRepoDetail(repo.name)
+        const scanStatus = detail.repo.gate_status === 'pass' ? 'pass' : detail.repo.readiness_score >= 50 ? 'warning' : 'fail'
+        const inBatch = reportScanResult(repo.id, scanStatus)
+        if (!inBatch) {
+          addNotification({
+            type: 'scan_completed',
+            content: `Scan completed — ${repo.name} · ${scanStatus}, ${detail.repo.findings_count} findings`,
+            status: scanStatus,
+            link: { page: 'repositories', params: { repo: repo.name } },
+            batch_id: null,
+            batch_summary: null,
+          })
+        }
+        scanTimers.current.delete(repo.id)
+      }, delay)
+      scanTimers.current.set(repo.id, timer)
+    }
+    return () => {
+      scanTimers.current.forEach(t => clearTimeout(t))
+      scanTimers.current.clear()
+    }
+  }, [repos, addNotification, reportScanResult])
 
   const getSession = useCallback((slug: string) => {
     return sessionsRef.current.get(slug)
