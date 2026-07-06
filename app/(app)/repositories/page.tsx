@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ScanSearch, RefreshCw, Search, Loader2, Play,
@@ -52,6 +52,14 @@ function autofixGateStatus(r: ImportedRepo): { label: string; variant: 'success'
 }
 
 export default function RepositoriesPage() {
+  return (
+    <Suspense fallback={null}>
+      <RepositoriesPageInner />
+    </Suspense>
+  )
+}
+
+function RepositoriesPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
