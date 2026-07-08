@@ -1,4 +1,4 @@
-# CF Design System
+# TR Design System
 
 > A three-layer design system for Component Factory — built for humans and AI agents alike.
 
@@ -89,6 +89,10 @@ Primitive → Semantic → Component → Pattern → Page
   --color-accent-subtle:  var(--primitive-teal-900);
   --color-accent-border:  var(--primitive-sky-800);
 
+  --color-ai-text: #A78BFA;
+  --color-ai-bg:   rgba(109, 40, 217, 0.18);
+  --color-ai-glow: rgba(109, 40, 217, 0.08);
+
   --color-danger-text:   var(--primitive-red-400);
   --color-danger-bg:     var(--primitive-red-900);
   --color-danger-hover:  var(--primitive-red-500);
@@ -152,6 +156,9 @@ Primitive → Semantic → Component → Pattern → Page
   --color-accent-hover:   #158F68;
   --color-accent-subtle:  #E0F4FD;
   --color-accent-border:  #BAE6FD;
+  --color-ai-text: #7C3AED;
+  --color-ai-bg:   #EDE4FB;
+  --color-ai-glow: rgba(124, 58, 237, 0.06);
   --color-danger-text:   #DC2626;
   --color-danger-bg:     #FEF2F2;
   --color-danger-border: #FECACA;
@@ -370,10 +377,13 @@ export * from './Checkbox'
 export * from './Divider'
 export * from './Dropdown'
 export * from './ErrorBoundary'
+export * from './FeatureGateModal'
 export * from './FileUpload'
 export * from './InputField'
 export * from './Modal'
 export * from './NavItem'
+export * from './NotificationBell'
+export * from './NotificationContext'
 export * from './Pagination'
 export * from './Popover'
 export * from './ProgressBar'
@@ -691,6 +701,7 @@ export function ProgressBar({ value, label, showValue, className }: ProgressBarP
 // components/ui/Spinner.tsx
 interface SpinnerProps {
   size?: 'sm' | 'md'
+  variant?: 'neutral' | 'accent'
   className?: string
 }
 
@@ -699,14 +710,20 @@ const sizeStyles = {
   md: 'w-[20px] h-[20px] border-2',
 }
 
-export function Spinner({ size = 'md', className }: SpinnerProps) {
+const variantStyles = {
+  neutral: 'border-t-[var(--color-text-primary)]',
+  accent: 'border-t-[var(--color-accent-default)]',
+}
+
+export function Spinner({ size = 'md', variant = 'neutral', className }: SpinnerProps) {
   return (
     <div
       role="status"
       aria-label="Loading"
       className={[
-        'rounded-[var(--radius-pill)] border-[var(--color-border-muted)] border-t-[var(--color-text-primary)] animate-spin',
+        'rounded-[var(--radius-pill)] border-[var(--color-border-muted)] animate-spin',
         sizeStyles[size],
+        variantStyles[variant],
         className,
       ].filter(Boolean).join(' ')}
     />
@@ -1923,6 +1940,21 @@ export function Pagination({
 
 ---
 
+### 4.2 Feature Components
+
+> Built on top of 4.1 primitives for a specific product feature. Documented for reference only — read the source file directly before reusing.
+
+#### NotificationBell
+`components/ui/NotificationBell.tsx` — bell trigger + unread-count badge + `Popover`-style dropdown listing `AppNotification` items from `NotificationContext`. Colors notification icons per type via the same token scale as `Badge`/`Alert` (including `--color-ai-text`/`--color-ai-bg` for autofix notifications).
+
+#### FeatureGateModal
+`components/ui/FeatureGateModal.tsx` — a `Modal` preset shown when a user hits a gated feature (`autofix` | `enrichment`). Props: `open`, `feature: FeatureGate`, `onClose`.
+
+#### NotificationContext
+`components/ui/NotificationContext.tsx` — `NotificationProvider` / `useNotifications()`. Holds `AppNotification[]` state, read/unread tracking, and batching helpers (`startBatch`, `reportAutofixResult`) for scan/autofix/invite events. Not a visual component — a context provider, same category as `ToastContext`.
+
+---
+
 ## 5. Patterns
 
 ### Sidebar Pattern
@@ -2231,10 +2263,21 @@ export function EmptyState({ icon: Icon, title, description, action, danger }: E
 
 ---
 
+### Members Section Pattern
+
+`components/patterns/MembersSection.tsx` — team-members management screen composed entirely from existing `components/ui`: `Table` (sortable columns, status `Badge`, `Popover` menu per row for role change/resend/remove), `Modal` + `InputField` + `Dropdown` for invite-by-email and invite-by-link flows, `EmptyState` for the zero-members state. No new primitives — reference only for the composition pattern.
+
+### Settings Sidebar Pattern
+
+`components/patterns/SettingsSidebar.tsx` — secondary nav for the settings area, built from `NavItem` (Account/Organization/Members/Integrations) plus a back-to-app control. Same composition pattern as `Sidebar` but scoped to a sub-section instead of the whole app.
+
+---
+
 ## 9. Changelog
 
 | Version | Date | Changes |
 |---|---|---|
+| `0.5.0` | 07/08/26 | Renamed to TR Design System; added `--color-ai-*` tokens; `Spinner` `variant` prop; documented `NotificationBell`, `FeatureGateModal`, `NotificationContext`, `MembersSection`, `SettingsSidebar` |
 | `0.4.1` | 06/17/26 | Token bug fixes, code fixes, z-index corrections |
 | `0.4.0` | 04/28/26 | Full token audit, radius tokens, ErrorBoundary, ToastContext |
 | `0.3.0` | 04/28/26 | Token governance, motion system, patterns, barrel export |
@@ -2243,4 +2286,4 @@ export function EmptyState({ icon: Icon, title, description, action, danger }: E
 
 ---
 
-*CF Design System — maintained by the Component Factory design team.*
+*TR Design System — maintained by the Component Factory design team.*

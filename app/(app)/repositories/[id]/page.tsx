@@ -5,7 +5,7 @@ import {
   ChevronDown, RefreshCw, Download,
   CheckCircle, EyeOff, Shield, Eye, Circle,
   Sparkles, Info, AlertTriangle, RotateCcw, Settings, Filter,
-  Wand2, Play, Loader2, Check, X, FileText, Copy, ScanSearch, Search,
+  Wand2, Play, Check, X, FileText, Copy, ScanSearch, Search,
 } from 'lucide-react'
 import { Button, Badge, Pagination, Dropdown, Tabs, Checkbox, Spinner, Tooltip, Modal, InputField, FeatureGateModal, type FeatureGate } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -592,7 +592,7 @@ export default function RepoDetailPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <Loader2 size={14} className="text-[var(--color-accent-default)] animate-spin flex-shrink-0" />
+                      <Spinner size="sm" variant="accent" className="flex-shrink-0" />
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-[var(--color-text-primary)]">Scanning in progress...</span>
                         <span className="text-xs text-[var(--color-text-tertiary)]">Results will update when complete. You&apos;ll be notified when done.</span>
@@ -987,15 +987,15 @@ export default function RepoDetailPage() {
                         style={{
                           width: 180,
                           height: 180,
-                          background: 'radial-gradient(circle, rgba(109,40,217,0.08) 0%, transparent 70%)',
+                          background: 'radial-gradient(circle, var(--color-ai-glow) 0%, transparent 70%)',
                           pointerEvents: 'none',
                         }}
                       />
                       <div
                         className="relative w-16 h-16 rounded-[var(--radius-card)] flex items-center justify-center"
-                        style={{ backgroundColor: 'rgba(109, 40, 217, 0.18)' }}
+                        style={{ backgroundColor: 'var(--color-ai-bg)' }}
                       >
-                        <Wand2 size={28} style={{ color: '#A78BFA' }} />
+                        <Wand2 size={28} style={{ color: 'var(--color-ai-text)' }} />
                       </div>
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -1009,7 +1009,7 @@ export default function RepoDetailPage() {
                   {/* 3-column feature highlights */}
                   <div className="w-full grid grid-cols-3 gap-3">
                     {([
-                      { icon: Sparkles, title: 'AI-generated fixes',   text: 'Each finding gets an exact code fix with a diff to review',              iconStyle: { color: '#A78BFA' }, bgStyle: { backgroundColor: 'rgba(109,40,217,0.14)' } },
+                      { icon: Sparkles, title: 'AI-generated fixes',   text: 'Each finding gets an exact code fix with a diff to review',              iconStyle: { color: 'var(--color-ai-text)' }, bgStyle: { backgroundColor: 'var(--color-ai-bg)' } },
                       { icon: Eye,      title: 'You stay in control',   text: 'Accept or reject every fix individually before anything changes',        iconStyle: { color: 'var(--color-accent-default)' }, bgStyle: { backgroundColor: 'var(--color-accent-subtle)' } },
                       { icon: Shield,   title: 'Sandboxed execution',   text: 'Fixes run in an isolated environment before being proposed to you',      iconStyle: { color: 'var(--color-success-text)' }, bgStyle: { backgroundColor: 'var(--color-success-bg)' } },
                     ] as const).map(({ icon: Icon, title, text, iconStyle, bgStyle }) => (
@@ -1049,7 +1049,7 @@ export default function RepoDetailPage() {
                 <div className="w-full max-w-[640px] flex flex-col gap-6 items-center">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-14 h-14 rounded-[var(--radius-card)] bg-[var(--color-accent-subtle)] border border-[var(--color-border-muted)] flex items-center justify-center">
-                      <Loader2 size={24} className="text-[var(--color-accent-default)] animate-spin" />
+                      <Spinner size="md" variant="accent" />
                     </div>
                     <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Autofix in progress</h2>
                     <p className="text-sm text-[var(--color-text-secondary)] text-center">Generating fixes for {slug}.</p>

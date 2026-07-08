@@ -1,12 +1,10 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Eye, EyeOff, CheckCircle2, XCircle, BellOff, Zap } from 'lucide-react'
+import { Eye, EyeOff, CheckCircle2, XCircle, Zap } from 'lucide-react'
 import { Button, InputField, Toggle, Dropdown, Modal, Badge } from '@/components/ui'
 import { FormLayout } from '@/components/patterns/FormLayout'
-import { EmptyState } from '@/components/patterns/EmptyState'
 import { useToast } from '@/components/ui/ToastContext'
-import { useRepos } from '@/app/(app)/repositories/RepoContext'
 import { useSettings } from '@/app/(app)/settings/SettingsContext'
 
 type ToggleId = 'enrichment' | 'autofix'
@@ -30,7 +28,6 @@ function maskKey(key: string) {
 
 export default function IntegrationsSettingsPage() {
   const { toast } = useToast()
-  const { repos, toggleMute } = useRepos()
   const searchParams = useSearchParams()
   const [highlightSection, setHighlightSection] = useState<string | null>(null)
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -60,8 +57,6 @@ export default function IntegrationsSettingsPage() {
 
   const [hasInteracted, setHasInteracted] = useState(false)
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
-
-  const mutedRepos = repos.filter(r => r.notifications_muted)
 
   const setEnabled = (which: ToggleId, value: boolean) => {
     if (which === 'enrichment') setEnrichmentEnabled(value)
@@ -129,11 +124,6 @@ export default function IntegrationsSettingsPage() {
     clearLlmConfig()
     setRemoveConfirmOpen(false)
     toast('LLM provider removed. Enrichment and Autofix have been disabled.')
-  }
-
-  const handleUnmute = (id: string, name: string) => {
-    toggleMute(id)
-    toast(`${name} unmuted`)
   }
 
   const renderReadyBadge = (which: ToggleId) => {
@@ -225,21 +215,6 @@ export default function IntegrationsSettingsPage() {
           </FormLayout>
           </div>
         )}
-
-        <FormLayout title="Muted Repositories" onSubmit={(e) => e.preventDefault()}>
-          {mutedRepos.length === 0 ? (
-            <EmptyState icon={BellOff} title="No muted repositories" description="Repositories you mute notifications for will appear here" />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {mutedRepos.map(repo => (
-                <div key={repo.id} className="flex items-center justify-between rounded-[var(--radius-sharp)] border border-[var(--color-border-muted)] px-3.5 py-2.5">
-                  <span className="text-sm text-[var(--color-text-primary)]">{repo.name}</span>
-                  <Button variant="ghost" size="sm" onClick={() => handleUnmute(repo.id, repo.name)}>Unmute</Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </FormLayout>
       </div>
 
       <Modal

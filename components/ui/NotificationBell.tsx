@@ -26,14 +26,14 @@ const TYPE_CONFIG: Record<NotificationType, IconCfg> = {
   },
   autofix_completed: {
     icon: Wrench,
-    bgStyle: { backgroundColor: 'rgba(109, 40, 217, 0.18)' },
-    iconStyle: { color: '#A78BFA' },
+    bgStyle: { backgroundColor: 'var(--color-ai-bg)' },
+    iconStyle: { color: 'var(--color-ai-text)' },
     bulk: false,
   },
   bulk_autofix_completed: {
     icon: Wrench,
-    bgStyle: { backgroundColor: 'rgba(109, 40, 217, 0.18)' },
-    iconStyle: { color: '#A78BFA' },
+    bgStyle: { backgroundColor: 'var(--color-ai-bg)' },
+    iconStyle: { color: 'var(--color-ai-text)' },
     bulk: true,
   },
   team_invite_accepted: {

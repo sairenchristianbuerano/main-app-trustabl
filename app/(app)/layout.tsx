@@ -19,8 +19,6 @@ const pageTitles: Record<string, string> = {
   repositories: 'Repositories',
   autofix: 'Repositories',
   settings: 'Settings',
-  members: 'Members',
-  pricing: 'Pricing',
 }
 
 const subjectOptions = [
@@ -99,7 +97,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             username="Trustabl"
             onLogout={() => router.push('/')}
             onAccount={() => router.push('/settings')}
-            onViewPlans={() => router.push('/pricing')}
             onContactUs={() => setContactOpen(true)}
           />
         )}

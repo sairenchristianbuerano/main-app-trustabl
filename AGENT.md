@@ -1,8 +1,8 @@
-# CF Design System — Agent & Developer Guide
+# TR Design System — Agent & Developer Guide
 
 > **Two files. One prompt. That's it.**
 > - `AGENT.md` — this file: implementation rules, phases, checklist, Figma guide
-> - `cf-design-system.md` — visual identity + component code: jump to sections only, never read top to bottom
+> - `tr-design-system.md` — visual identity + component code: jump to sections only, never read top to bottom
 
 ---
 
@@ -36,7 +36,7 @@ Rules:
 - In Phase 8: implement /ui-docs exactly as specified in AGENT.md Part 8
   → Storybook-style reference with spec annotations per component
 - /ui-preview = visual verification · /ui-docs = developer spec reference
-- When all phases are done: report "✅ CF Design System fully implemented"
+- When all phases are done: report "✅ TR Design System fully implemented"
 ```
 
 ---
@@ -59,7 +59,7 @@ npm install lucide-react focus-trap-react
 
 > **Never run** `npx create-next-app@latest cf-app` — this creates an unwanted `cf-app/` subfolder. Always use `.` to scaffold into the current directory.
 
-> **Before running any commands:** place `AGENT.md` and `cf-design-system.md` in the project root first. Future agent runs need these files locally to reference specs without re-downloading.
+> **Before running any commands:** place `AGENT.md` and `tr-design-system.md` in the project root first. Future agent runs need these files locally to reference specs without re-downloading.
 
 **Detect project structure after scaffolding:**
 ```bash
@@ -91,14 +91,14 @@ npm run dev
 ---
 
 ### Phase 2 — CSS Token Setup
-**Read:** `cf-design-system.md` — jump to `## 1.5 Setup & Token Wiring` only.
+**Read:** `tr-design-system.md` — jump to `## 1.5 Setup & Token Wiring` only.
 
 Copy these 3 code blocks from that section into your project:
 1. `globals.css` — replaces `app/globals.css`
 2. `tailwind.config.ts` — replaces your config
 3. `layout.tsx` — replaces `app/layout.tsx`
 
-**Also create `next.config.ts`** with `images.remotePatterns` — see `cf-design-system.md` section 1.5 for the exact block. Required for Avatar photo type to load external images.
+**Also create `next.config.ts`** with `images.remotePatterns` — see `tr-design-system.md` section 1.5 for the exact block. Required for Avatar photo type to load external images.
 
 **Verify in browser DevTools console:**
 ```js
@@ -120,7 +120,7 @@ getComputedStyle(document.documentElement).getPropertyValue('--color-accent-defa
 ---
 
 ### Phase 4 — Implement Components (One at a Time)
-**Read:** For each component, jump to `#### ComponentName` in `cf-design-system.md` section 4.1. Read that section only. Copy the code. Apply fixes from Part 3. Run the per-file check from Part 4. Move to the next.
+**Read:** For each component, jump to `#### ComponentName` in `tr-design-system.md` section 4.1. Read that section only. Copy the code. Apply fixes from Part 3. Run the per-file check from Part 4. Move to the next.
 
 **Order (each group depends on the previous):**
 
@@ -162,7 +162,7 @@ npm run build
 ---
 
 ### Phase 5 — Implement Patterns
-**Read:** Jump to `## 5. Patterns` in `cf-design-system.md`. Read each pattern section only.
+**Read:** Jump to `## 5. Patterns` in `tr-design-system.md`. Read each pattern section only.
 
 ```
 Sidebar          → components/patterns/Sidebar.tsx
@@ -205,7 +205,7 @@ Create `app/ui-docs/page.tsx` using the code in Part 8. Visit `http://localhost:
 **Read:** Part 6 of this file.
 
 Use this phase every time a designer shares a new Figma design.
-✅ Done when every Figma element maps to a CF component and build passes.
+✅ Done when every Figma element maps to a TR component and build passes.
 
 ---
 
@@ -454,7 +454,7 @@ import { FormLayout, FormSection } from '@/components/patterns/FormLayout'
 
 ### Token Authority
 
-`cf-design-system.md` is the single source of truth for all tokens. If any local direction contradicts the MD — **the MD wins**.
+`tr-design-system.md` is the single source of truth for all tokens. If any local direction contradicts the MD — **the MD wins**.
 
 ---
 
@@ -494,7 +494,7 @@ primitives.tsx or utils.tsx catch-all files
 
 ## Part 3 — Known Code Fixes
 
-> Apply these when copying component code from `cf-design-system.md`.
+> Apply these when copying component code from `tr-design-system.md`.
 
 | Component | Fix |
 |---|---|
@@ -661,22 +661,22 @@ List every UI element: Type, Size, Colors, Spacing, Border radius, Typography, I
 Do not implement anything yet.
 ```
 
-### Step 2 — Map to CF components
+### Step 2 — Map to TR components
 ```
-Map each element to a CF Design System component.
+Map each element to a TR Design System component.
 Flag any element with NO match.
 Do not implement yet.
 ```
 
 ### Step 3 — Check token alignment
 ```
-Map Figma values to CF tokens.
+Map Figma values to TR tokens.
 Flag any value that does not map to an existing token.
 ```
 
 ### Step 4 — Implement
 ```
-Implement using only CF components mapped in Step 2.
+Implement using only TR components mapped in Step 2.
 Follow AGENT.md Part 2 rules exactly.
 Run Part 4 checklist after each file.
 ```
@@ -691,7 +691,7 @@ Run Part 4 checklist after each file.
 ## Part 7 — How to Prompt
 
 ### Claude Code (project files in repo root)
-Place `AGENT.md` and `cf-design-system.md` in your project root. Claude Code reads `AGENT.md` automatically.
+Place `AGENT.md` and `tr-design-system.md` in your project root. Claude Code reads `AGENT.md` automatically.
 
 **Starting prompt:**
 ```
@@ -703,7 +703,7 @@ Confirm you've read it by stating: the accent color, the button radius token, an
 **Per-component prompt:**
 ```
 Read AGENT.md Part 2 and Part 3.
-Then read the #### [ComponentName] section in cf-design-system.md section 4.1.
+Then read the #### [ComponentName] section in tr-design-system.md section 4.1.
 Implement the component, apply all fixes from Part 3, then run the Part 4 checklist.
 ```
 
@@ -734,4 +734,4 @@ Report: file name · violation type · suggested fix.
 
 ---
 
-*CF Design System v0.4.1*
+*TR Design System v0.4.1*

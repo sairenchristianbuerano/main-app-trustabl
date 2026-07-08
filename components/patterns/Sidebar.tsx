@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { ChevronsUpDown, PanelLeft, Settings, LogOut, Mail, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
+import { ChevronsUpDown, PanelLeft, Settings, LogOut, Mail, BookOpen, ArrowUpRight } from 'lucide-react'
 import { NavItem, Divider } from '@/components/ui'
 
 function SidebarTooltip({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
@@ -75,14 +75,13 @@ interface SidebarProps {
   onProfileClick?: () => void
   onLogout?: () => void
   onAccount?: () => void
-  onViewPlans?: () => void
   onContactUs?: () => void
   brand?: string
   username?: string
 }
 
 export function Sidebar({
-  items, activeValue, onNavigate, onNewComponent, onCollapse, onProfileClick, onLogout, onAccount, onViewPlans, onContactUs, brand = 'ComponentFactory', username,
+  items, activeValue, onNavigate, onNewComponent, onCollapse, onProfileClick, onLogout, onAccount, onContactUs, brand = 'ComponentFactory', username,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -184,20 +183,6 @@ export function Sidebar({
       </div>
 
       <div className={['flex flex-col gap-1 pb-2 border-t border-[var(--color-border-muted)] pt-2', collapsed ? 'items-center' : 'px-2'].join(' ')}>
-        {false && !collapsed && (
-          <div className="rounded-[var(--radius-sharp)] bg-[var(--color-bg-raised)] border border-[var(--color-border-muted)] p-3 flex flex-col gap-2 mb-1">
-            <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-[var(--color-accent-default)]" />
-              <span className="text-xs font-semibold text-[var(--color-text-primary)]">Upgrade to Pro</span>
-            </div>
-            <p className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
-              Unlock unlimited repos, advanced analytics, and priority support.
-            </p>
-            <button onClick={onViewPlans} className="w-full h-7 rounded-[var(--radius-sharp)] bg-[var(--color-accent-default)] text-[11px] font-medium text-[var(--color-bg-page)] hover:bg-[var(--color-accent-hover)] transition-[background] duration-150">
-              View plans
-            </button>
-          </div>
-        )}
         {([
           { label: 'GitHub', icon: GithubIcon, onClick: () => window.open('https://github.com/trustabl/trustabl', '_blank') },
           { label: 'Contact Us', icon: Mail, onClick: onContactUs },

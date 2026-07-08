@@ -3,11 +3,11 @@ import { Suspense, useState, useMemo, useCallback, useEffect, useRef } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ScanSearch, RefreshCw, Search, Loader2, Play,
-  Trash2, Filter, ArrowRight, Wand2, Bell, BellOff, MoreVertical,
+  Trash2, Filter, ArrowRight, Wand2, MoreVertical,
 } from 'lucide-react'
 import {
   Button, Badge, Table, InputField, Dropdown,
-  Pagination, Modal,
+  Pagination, Modal, Popover,
 } from '@/components/ui'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { EmptyState } from '@/components/patterns/EmptyState'
@@ -64,12 +64,11 @@ function RepositoriesPageInner() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { addNotification, startBatch, reportAutofixResult } = useNotifications()
-  const { repos, setRepos, githubConnected, setGithubConnected, toggleMute } = useRepos()
+  const { repos, setRepos, githubConnected, setGithubConnected } = useRepos()
 
   const [connectOpen, setConnectOpen] = useState(false)
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ImportedRepo | null>(null)
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilters, setActiveFilters] = useState<string[]>(() => {
@@ -81,13 +80,6 @@ function RepositoriesPageInner() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT)
-
-  useEffect(() => {
-    if (!openMenuId) return
-    const handler = () => setOpenMenuId(null)
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [openMenuId])
 
   const languages = useMemo(() => [...new Set(repos.map(r => r.language))].sort(), [repos])
   const frameworks = useMemo(() => [...new Set(repos.map(r => r.framework).filter(f => f !== 'Unknown'))].sort(), [repos])
@@ -417,51 +409,29 @@ function RepositoriesPageInner() {
                 <Button variant="text" size="sm" icon={ArrowRight} iconOnly onClick={() => router.push(`/repositories/${encodeURIComponent(row.name)}?tab=autofix`)} aria-label="Review fixes" />
               </Tooltip>
             )}
-            <div className="relative" onClick={e => e.stopPropagation()}>
-              <button
-                onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
-                className="w-[36px] h-[36px] inline-flex items-center justify-center rounded-[var(--radius-base)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
-                aria-label="More actions"
-              >
-                <MoreVertical size={16} />
-              </button>
-              {openMenuId === row.id && (
-                <div
-                  className="absolute right-0 top-full mt-1 w-[188px] rounded-[var(--radius-base)] border border-[var(--color-border-muted)] bg-[var(--color-bg-overlay)] shadow-[var(--shadow-float)] flex flex-col overflow-hidden animate-[fadeScale_150ms_ease-out]"
-                  style={{ zIndex: 'var(--z-dropdown)' }}
-                  onClick={e => e.stopPropagation()}
-                >
+            <div onClick={e => e.stopPropagation()}>
+              <Popover
+                type="menu"
+                position="bottom"
+                trigger={
                   <button
-                    onClick={() => { handleScan([row.id]); setOpenMenuId(null) }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-colors duration-150"
+                    className="w-[36px] h-[36px] inline-flex items-center justify-center rounded-[var(--radius-base)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-raised)] transition-[background] duration-150"
+                    aria-label="More actions"
                   >
-                    <RefreshCw size={14} className="text-[var(--color-text-tertiary)]" />
-                    Rescan
+                    <MoreVertical size={16} />
                   </button>
-                  <div className="h-px bg-[var(--color-border-muted)]" />
-                  <button
-                    onClick={() => { toggleMute(row.id); toast(row.notifications_muted ? `${row.name} unmuted` : `${row.name} muted`); setOpenMenuId(null) }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-raised)] transition-colors duration-150"
-                  >
-                    {row.notifications_muted ? <BellOff size={14} className="text-[var(--color-text-tertiary)]" /> : <Bell size={14} className="text-[var(--color-text-tertiary)]" />}
-                    {row.notifications_muted ? 'Unmute' : 'Mute'}
-                  </button>
-                  <div className="h-px bg-[var(--color-border-muted)]" />
-                  <button
-                    onClick={() => { setDeleteTarget(row); setOpenMenuId(null) }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--color-danger-text)] hover:bg-[var(--color-danger-bg)] transition-colors duration-150"
-                  >
-                    <Trash2 size={14} />
-                    Delete
-                  </button>
-                </div>
-              )}
+                }
+                items={[
+                  { label: 'Rescan', icon: RefreshCw, onClick: () => handleScan([row.id]) },
+                  { label: 'Delete', icon: Trash2, danger: true, onClick: () => setDeleteTarget(row) },
+                ]}
+              />
             </div>
           </div>
         )
       },
     },
-  ], [handleScan, runAutofixWithChecks, checkingAutofix, toggleMute, toast, router, openMenuId])
+  ], [handleScan, runAutofixWithChecks, checkingAutofix, toast, router])
 
   if (!hasRepos) {
     return (

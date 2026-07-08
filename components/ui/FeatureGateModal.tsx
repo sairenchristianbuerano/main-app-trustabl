@@ -14,8 +14,8 @@ interface Props {
 const CONFIG = {
   autofix: {
     icon: Wrench,
-    iconBg: { backgroundColor: 'rgba(109, 40, 217, 0.18)' },
-    iconColor: { color: '#A78BFA' },
+    iconBg: { backgroundColor: 'var(--color-ai-bg)' },
+    iconColor: { color: 'var(--color-ai-text)' },
     title: 'Autofix is not enabled',
     body: 'Autofix automatically generates exact code fixes for your findings. Review each fix, accept what looks good, and ship cleaner agent code faster.',
     highlights: [

@@ -1,5 +1,6 @@
 interface SpinnerProps {
   size?: 'sm' | 'md'
+  variant?: 'neutral' | 'accent'
   className?: string
 }
 
@@ -8,14 +9,20 @@ const sizeStyles = {
   md: 'w-[20px] h-[20px] border-2',
 }
 
-export function Spinner({ size = 'md', className }: SpinnerProps) {
+const variantStyles = {
+  neutral: 'border-t-[var(--color-text-primary)]',
+  accent: 'border-t-[var(--color-accent-default)]',
+}
+
+export function Spinner({ size = 'md', variant = 'neutral', className }: SpinnerProps) {
   return (
     <div
       role="status"
       aria-label="Loading"
       className={[
-        'rounded-[var(--radius-pill)] border-[var(--color-border-muted)] border-t-[var(--color-text-primary)] animate-spin',
+        'rounded-[var(--radius-pill)] border-[var(--color-border-muted)] animate-spin',
         sizeStyles[size],
+        variantStyles[variant],
         className,
       ].filter(Boolean).join(' ')}
     />

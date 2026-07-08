@@ -97,7 +97,7 @@ export default function UIPreviewPage() {
         {/* Topbar */}
         <div className="flex-shrink-0 flex items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-bg-surface)] px-6 py-4" style={{ zIndex: 'var(--z-overlay)' }}>
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">CF Design System</h1>
+            <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">TR Design System</h1>
             <p className="text-sm text-[var(--color-text-secondary)]">v0.4.1 — UI Preview</p>
           </div>
           <Badge variant="success">All components</Badge>

@@ -4,9 +4,9 @@ import { useRouter } from 'next/navigation'
 import {
   FolderGit2, AlertTriangle, Wrench, ChevronRight,
   Lock, Sparkles, Gauge,
-  FolderPlus, ScanSearch, Loader2,
+  FolderPlus, ScanSearch,
 } from 'lucide-react'
-import { Button, Badge, Avatar } from '@/components/ui'
+import { Button, Badge, Avatar, Spinner } from '@/components/ui'
 import { useToast } from '@/components/ui/ToastContext'
 import { DashboardGridSkeleton } from '@/components/patterns/DashboardSkeleton'
 import { useRepos, type ImportedRepo } from '../repositories/RepoContext'
@@ -135,7 +135,7 @@ function StatusBanner({ repos, scanned, onConnect, onRunScan, onViewProgress }: 
     return (
       <div className={bannerClass} style={bannerStyle}>
         <div className="flex items-center gap-3">
-          <Loader2 size={18} className="text-[var(--color-accent-default)] flex-shrink-0 animate-spin" />
+          <Spinner size="md" variant="accent" className="flex-shrink-0" />
           <p className="text-sm text-[var(--color-text-secondary)]">Scanning {scanningRepo.name}... This usually takes a few minutes.</p>
         </div>
         <Button variant="secondary" onClick={() => onViewProgress(scanningRepo.name)}>View progress</Button>

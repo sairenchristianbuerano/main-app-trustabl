@@ -65,6 +65,10 @@
   --color-accent-subtle:  var(--primitive-teal-900);
   --color-accent-border:  var(--primitive-sky-800);
 
+  --color-ai-text: #A78BFA;
+  --color-ai-bg:   rgba(109, 40, 217, 0.18);
+  --color-ai-glow: rgba(109, 40, 217, 0.08);
+
   --color-danger-text:   var(--primitive-red-400);
   --color-danger-bg:     var(--primitive-red-900);
   --color-danger-hover:  var(--primitive-red-500);
@@ -128,6 +132,9 @@
   --color-accent-hover:   #158F68;
   --color-accent-subtle:  #E0F4FD;
   --color-accent-border:  #BAE6FD;
+  --color-ai-text: #7C3AED;
+  --color-ai-bg:   #EDE4FB;
+  --color-ai-glow: rgba(124, 58, 237, 0.06);
   --color-danger-text:   #DC2626;
   --color-danger-bg:     #FEF2F2;
   --color-danger-border: #FECACA;

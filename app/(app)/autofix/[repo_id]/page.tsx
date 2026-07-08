@@ -322,7 +322,7 @@ export default function AutofixDetailPage() {
         <div className="w-full max-w-[640px] flex flex-col gap-6 items-center">
           <div className="flex flex-col items-center gap-3">
             <div className="w-14 h-14 rounded-[var(--radius-card)] bg-[var(--color-accent-subtle)] border border-[var(--color-border-muted)] flex items-center justify-center">
-              <Loader2 size={24} className="text-[var(--color-accent-default)] animate-spin" />
+              <Spinner size="md" variant="accent" />
             </div>
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Autofix in progress</h2>
             <p className="text-sm text-[var(--color-text-secondary)] text-center">
